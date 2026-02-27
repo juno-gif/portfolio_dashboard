@@ -10,7 +10,7 @@ interface AccountCardsProps {
 
 export default function AccountCards({ accounts }: AccountCardsProps) {
   return (
-    <div className="grid grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
       {accounts.map((acc) => {
         const positive = acc.todayGainAmount >= 0;
         return (
@@ -21,7 +21,7 @@ export default function AccountCards({ accounts }: AccountCardsProps) {
                 ₩{formatKRW(acc.evalAmount)}
               </p>
               <p className={`text-sm font-medium mt-1 ${positive ? 'text-green-500' : 'text-red-500'}`}>
-                {positive ? '+' : ''}₩{formatKRW(Math.abs(acc.todayGainAmount))}
+                {positive ? '+' : '-'}₩{formatKRW(Math.abs(acc.todayGainAmount))}
               </p>
               <p className={`text-xs ${positive ? 'text-green-500' : 'text-red-500'}`}>
                 {formatRate(acc.todayGainRate)}

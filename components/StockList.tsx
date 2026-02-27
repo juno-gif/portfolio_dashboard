@@ -115,7 +115,7 @@ export default function StockList({ holdings, onSelect }: StockListProps) {
                   {formatRate(h.todayGainRate)}
                 </TableCell>
                 <TableCell className={`text-right whitespace-nowrap ${todayPositive ? 'text-green-500' : 'text-red-500'}`}>
-                  {todayPositive ? '+' : ''}₩{Math.abs(h.todayGainAmount).toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
+                  {todayPositive ? '+' : '-'}₩{Math.abs(h.todayGainAmount).toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
                 </TableCell>
                 <TableCell className="text-right whitespace-nowrap">{evalDisplay}</TableCell>
                 <TableCell className={`text-right whitespace-nowrap ${totalPositive ? 'text-green-500' : 'text-red-500'}`}>
