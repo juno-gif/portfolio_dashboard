@@ -40,7 +40,7 @@ export default function HeroSection({ summary, onRefresh, isRefreshing }: HeroSe
         <div>
           <p className="text-sm text-muted-foreground mb-1">오늘 손익</p>
           <p className={`text-2xl sm:text-4xl font-bold ${todayPositive ? 'text-green-500' : 'text-red-500'}`}>
-            {todayPositive ? '+' : ''}₩{Math.abs(summary.todayGainAmount).toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
+            {todayPositive ? '+' : '-'}₩{Math.abs(summary.todayGainAmount).toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
           </p>
           <p className={`text-lg sm:text-2xl font-semibold mt-1 ${todayPositive ? 'text-green-500' : 'text-red-500'}`}>
             {formatRate(summary.todayGainRate)}
@@ -57,7 +57,7 @@ export default function HeroSection({ summary, onRefresh, isRefreshing }: HeroSe
             투자원금 ₩{formatKRW(summary.totalCost)}
           </p>
           <p className={`text-sm font-medium mt-1 ${totalPositive ? 'text-green-500' : 'text-red-500'}`}>
-            전체 {totalPositive ? '+' : ''}₩{Math.abs(summary.totalGainAmount).toLocaleString('ko-KR', { maximumFractionDigits: 0 })} ({formatRate(summary.totalGainRate)})
+            전체 {totalPositive ? '+' : '-'}₩{Math.abs(summary.totalGainAmount).toLocaleString('ko-KR', { maximumFractionDigits: 0 })} ({formatRate(summary.totalGainRate)})
           </p>
         </div>
       </div>
