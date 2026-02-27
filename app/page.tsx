@@ -58,9 +58,21 @@ export default function Home() {
     if (rawHoldings.length > 0) loadPrices(rawHoldings);
   }, [rawHoldings, loadPrices]);
 
-  // 마운트 시 샘플 데이터 자동 로드
+  // 마운트 시: 저장된 CSV 복원 → 없으면 샘플 로드
   useEffect(() => {
     (async () => {
+      try {
+        const saved = localStorage.getItem('portfolio_csv');
+        if (saved) {
+          const file = new File([saved], 'portfolio.csv', { type: 'text/csv' });
+          const holdings = await parsePortfolioCSV(file);
+          await handleUpload(holdings);
+          return;
+        }
+      } catch {
+        localStorage.removeItem('portfolio_csv');
+      }
+      // 저장된 데이터 없음 → 샘플 로드 (localStorage에 저장 안 함)
       try {
         const res = await fetch('/sample.csv');
         const text = await res.text();
@@ -108,7 +120,10 @@ export default function Home() {
     if (!file) return;
     e.target.value = '';
     try {
-      const holdings = await parsePortfolioCSV(file);
+      const text = await file.text();
+      const csvFile = new File([text], file.name, { type: 'text/csv' });
+      const holdings = await parsePortfolioCSV(csvFile);
+      localStorage.setItem('portfolio_csv', text);
       await handleUpload(holdings);
     } catch {
       // 파싱 실패 무시
