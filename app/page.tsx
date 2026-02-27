@@ -26,7 +26,9 @@ export default function Home() {
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [selectedHolding, setSelectedHolding] = useState<ConsolidatedHolding | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
+  const dragCounterRef = useRef(0);
 
   const loadPrices = useCallback(async (holdings: RawHolding[]) => {
     setLoading(true);
@@ -115,10 +117,7 @@ export default function Home() {
     URL.revokeObjectURL(url);
   };
 
-  const handleCsvFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
+  const handleCsvFile = async (file: File) => {
     try {
       const text = await file.text();
       const csvFile = new File([text], file.name, { type: 'text/csv' });
@@ -128,6 +127,37 @@ export default function Home() {
     } catch {
       // 파싱 실패 무시
     }
+  };
+
+  const handleCsvFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    await handleCsvFile(file);
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current += 1;
+    if (dragCounterRef.current === 1) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current === 0) setIsDragOver(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) await handleCsvFile(file);
   };
 
   // 초기 로딩 스켈레톤
@@ -149,7 +179,22 @@ export default function Home() {
   }
 
   return (
-    <div className="p-3 sm:p-6 space-y-4 max-w-7xl mx-auto">
+    <div
+      className="p-3 sm:p-6 space-y-4 max-w-7xl mx-auto relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* 드래그 오버레이 */}
+      {isDragOver && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-4 border-dashed border-primary rounded-xl pointer-events-none">
+          <div className="text-center">
+            <p className="text-4xl mb-3">📂</p>
+            <p className="text-xl font-semibold text-primary">CSV 파일을 여기에 놓으세요</p>
+          </div>
+        </div>
+      )}
       {/* 1. 히어로 — 오늘 손익 최우선 */}
       <HeroSection
         summary={portfolioSummary}
