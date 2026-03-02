@@ -27,6 +27,8 @@ export default function Home() {
   const [selectedHolding, setSelectedHolding] = useState<ConsolidatedHolding | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [portfolioToken, setPortfolioToken] = useState<string | null>(null);
+  const [copyDone, setCopyDone] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
 
@@ -60,9 +62,29 @@ export default function Home() {
     if (rawHoldings.length > 0) loadPrices(rawHoldings);
   }, [rawHoldings, loadPrices]);
 
-  // 마운트 시: 저장된 CSV 복원 → 없으면 샘플 로드
+  // 마운트 시: ?token= → KV → localStorage → 샘플 순서로 로드
   useEffect(() => {
     (async () => {
+      // 1) URL에 ?token= 있으면 KV에서 fetch
+      const params = new URLSearchParams(window.location.search);
+      const urlToken = params.get('token');
+      if (urlToken) {
+        try {
+          const res = await fetch(`/api/portfolio?token=${urlToken}`);
+          if (res.ok) {
+            const text = await res.text();
+            const file = new File([text], 'portfolio.csv', { type: 'text/csv' });
+            const holdings = await parsePortfolioCSV(file);
+            setPortfolioToken(urlToken);
+            await handleUpload(holdings);
+            return;
+          }
+        } catch {
+          // KV 로드 실패 시 다음 단계로
+        }
+      }
+
+      // 2) localStorage에 저장된 CSV
       try {
         const saved = localStorage.getItem('portfolio_csv');
         if (saved) {
@@ -74,7 +96,8 @@ export default function Home() {
       } catch {
         localStorage.removeItem('portfolio_csv');
       }
-      // 저장된 데이터 없음 → 샘플 로드 (localStorage에 저장 안 함)
+
+      // 3) 샘플 로드 (localStorage에 저장 안 함)
       try {
         const res = await fetch('/sample.csv');
         const text = await res.text();
@@ -122,6 +145,23 @@ export default function Home() {
       const text = await file.text();
       const csvFile = new File([text], file.name, { type: 'text/csv' });
       const holdings = await parsePortfolioCSV(csvFile);
+
+      // KV 저장 (신규 token 발급 or 기존 token 덮어쓰기)
+      try {
+        const url = portfolioToken
+          ? `/api/portfolio?token=${portfolioToken}`
+          : '/api/portfolio';
+        const res = await fetch(url, { method: 'POST', body: text });
+        if (res.ok) {
+          const { token } = await res.json();
+          setPortfolioToken(token);
+          const newUrl = `${window.location.pathname}?token=${token}`;
+          window.history.pushState({}, '', newUrl);
+        }
+      } catch {
+        // KV 저장 실패 시 localStorage fallback만 사용
+      }
+
       localStorage.setItem('portfolio_csv', text);
       await handleUpload(holdings);
     } catch {
@@ -217,7 +257,21 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 4. CSV 다운로드 / 재업로드 */}
+      {/* 4. CSV 다운로드 / 재업로드 / 내 URL */}
+      <div className="flex justify-end gap-4">
+        {portfolioToken && (
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(window.location.href);
+              setCopyDone(true);
+              setTimeout(() => setCopyDone(false), 2000);
+            }}
+            className="text-xs text-primary hover:text-primary/80 underline"
+          >
+            {copyDone ? '복사됨 ✓' : '내 포트폴리오 URL 복사'}
+          </button>
+        )}
+      </div>
       <div className="flex justify-end gap-4">
         <button
           onClick={handleDownloadCsv}
