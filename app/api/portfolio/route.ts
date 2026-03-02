@@ -1,5 +1,7 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 import { NextRequest, NextResponse } from 'next/server';
+
+const redis = Redis.fromEnv();
 
 // GET /api/portfolio?token=xxx → CSV 텍스트 반환
 export async function GET(request: NextRequest) {
@@ -8,7 +10,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'token이 필요합니다' }, { status: 400 });
   }
 
-  const csv = await kv.get<string>(`portfolio:${token}`);
+  const csv = await redis.get<string>(`portfolio:${token}`);
   if (!csv) {
     return NextResponse.json({ error: '데이터를 찾을 수 없습니다' }, { status: 404 });
   }
@@ -30,7 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   // TTL 1년
-  await kv.set(`portfolio:${token}`, csv, { ex: 60 * 60 * 24 * 365 });
+  await redis.set(`portfolio:${token}`, csv, { ex: 60 * 60 * 24 * 365 });
 
   return NextResponse.json({ token });
 }
