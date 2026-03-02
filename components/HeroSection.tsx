@@ -22,7 +22,7 @@ export default function HeroSection({ summary, onRefresh, isRefreshing }: HeroSe
           <span className="font-medium text-foreground">
             USD/KRW {summary.exchangeRate.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
           </span>
-          <span>{summary.updatedAt} 기준</span>
+          <span suppressHydrationWarning>{summary.updatedAt} 기준</span>
           <button
             onClick={onRefresh}
             disabled={isRefreshing}
