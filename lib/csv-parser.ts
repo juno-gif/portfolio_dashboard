@@ -36,10 +36,14 @@ export function parsePortfolioCSV(file: File): Promise<RawHolding[]> {
             continue;
           }
 
+          const rawCode = String(row['종목번호']).trim();
+          // KRW 종목번호는 6자리 — Excel이 앞의 0을 제거하는 경우 복원
+          const 종목번호 = unit === 'KRW' ? rawCode.padStart(6, '0') : rawCode;
+
           holdings.push({
             계좌: String(row['계좌']).trim(),
             종목명: String(row['종목명']).trim(),
-            종목번호: String(row['종목번호']).trim(),
+            종목번호,
             수량: Number(row['수량']),
             평균단가: Number(row['평균단가']),
             단위: unit as 'KRW' | 'USD',
