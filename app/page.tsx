@@ -203,16 +203,16 @@ export default function Home() {
   // 초기 로딩 스켈레톤
   if (loading && holdingsWithMeta.length === 0) {
     return (
-      <div className="p-3 sm:p-6 space-y-4 max-w-7xl mx-auto">
+      <div className="p-3 sm:p-6 space-y-4 max-w-screen-2xl mx-auto">
         <Skeleton className="h-40 w-full rounded-xl" />
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[...Array(5)].map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-lg" />
           ))}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-          <Skeleton className="h-72 rounded-xl" />
-          <Skeleton className="h-72 rounded-xl" />
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-6">
+          <Skeleton className="h-72 rounded-xl xl:col-span-2" />
+          <Skeleton className="h-72 rounded-xl xl:col-span-3" />
         </div>
       </div>
     );
@@ -220,7 +220,7 @@ export default function Home() {
 
   return (
     <div
-      className="p-3 sm:p-6 space-y-4 max-w-7xl mx-auto relative"
+      className="p-3 sm:p-6 space-y-4 max-w-screen-2xl mx-auto relative"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -246,12 +246,12 @@ export default function Home() {
       <AccountCards accounts={accountSummaries} />
 
       {/* 3. 섹터 차트 + 종목 리스트 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-        <div className="bg-card border rounded-xl p-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-6">
+        <div className="bg-card border rounded-xl p-4 xl:col-span-2">
           <h2 className="text-sm font-semibold mb-3">섹터 비중</h2>
           <SectorChart allocations={sectorAllocations} />
         </div>
-        <div className="bg-card border rounded-xl p-4 overflow-auto">
+        <div className="bg-card border rounded-xl p-4 overflow-auto xl:col-span-3">
           <h2 className="text-sm font-semibold mb-3">종목별 수익률</h2>
           <StockList holdings={consolidated} onSelect={handleSelectHolding} />
         </div>
