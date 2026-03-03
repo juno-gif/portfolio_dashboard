@@ -48,10 +48,17 @@ export default function SectorChart({ allocations }: SectorChartProps) {
           ))}
         </Pie>
         <Tooltip
-          formatter={(value: number | string | undefined) => [
-            `₩${Number(value ?? 0).toLocaleString('ko-KR')}`,
-            '평가금액',
-          ]}
+          content={({ active, payload }) => {
+            if (!active || !payload?.length) return null;
+            const d = payload[0].payload;
+            return (
+              <div className="bg-background border rounded-lg px-3 py-2 text-xs shadow-md">
+                <p className="font-semibold mb-1">{d.sector}</p>
+                <p className="text-muted-foreground">{d.ratio.toFixed(1)}%</p>
+                <p>₩{Number(d.value).toLocaleString('ko-KR')}</p>
+              </div>
+            );
+          }}
         />
         <Legend />
       </PieChart>
