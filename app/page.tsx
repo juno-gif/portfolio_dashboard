@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { RawHolding, HoldingWithMeta, ConsolidatedHolding } from '@/types/portfolio';
+import { RawHolding, HoldingWithMeta, ConsolidatedHolding, MiscAsset } from '@/types/portfolio';
 import {
   enrichHoldings,
   consolidateHoldings,
@@ -17,8 +17,13 @@ import AccountCards from '@/components/AccountCards';
 import SectorChart from '@/components/SectorChart';
 import StockList from '@/components/StockList';
 import StockDetailDrawer from '@/components/StockDetailDrawer';
+import ProjectionView from '@/components/ProjectionView';
+import MiscAssets from '@/components/MiscAssets';
+
+const MISC_LS_KEY = 'misc_assets';
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'projection'>('portfolio');
   const [rawHoldings, setRawHoldings] = useState<RawHolding[]>([]);
   const [holdingsWithMeta, setHoldingsWithMeta] = useState<HoldingWithMeta[]>([]);
   const [exchangeRate, setExchangeRate] = useState<number>(1370);
@@ -29,6 +34,7 @@ export default function Home() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [portfolioToken, setPortfolioToken] = useState<string | null>(null);
   const [copyDone, setCopyDone] = useState(false);
+  const [miscAssets, setMiscAssets] = useState<MiscAsset[]>([]);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
 
@@ -62,6 +68,57 @@ export default function Home() {
     if (rawHoldings.length > 0) loadPrices(rawHoldings);
   }, [rawHoldings, loadPrices]);
 
+  // 기타 자산 로드: KV(토큰 있을 때) → localStorage 순
+  const loadMiscAssets = useCallback(async (token: string | null) => {
+    if (token) {
+      try {
+        const res = await fetch(`/api/misc?token=${token}`);
+        if (res.ok) {
+          const data = await res.json();
+          setMiscAssets(Array.isArray(data) ? data : []);
+          return;
+        }
+      } catch {
+        // KV 실패 시 localStorage fallback
+      }
+    }
+    // localStorage에서 시도 (토큰 있을 때 이전 배포 호환: token 없는 키도 확인)
+    const keys = token
+      ? [`${MISC_LS_KEY}_${token}`, MISC_LS_KEY]
+      : [MISC_LS_KEY];
+    for (const key of keys) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          setMiscAssets(parsed);
+          // KV에 없었으면 지금 올려서 다른 기기에서도 볼 수 있도록 동기화
+          if (token) {
+            fetch(`/api/misc?token=${token}`, {
+              method: 'POST',
+              body: JSON.stringify(parsed),
+            }).catch(() => {});
+          }
+          return;
+        }
+      } catch {
+        localStorage.removeItem(key);
+      }
+    }
+  }, []);
+
+  const handleMiscAssetsChange = useCallback((assets: MiscAsset[]) => {
+    setMiscAssets(assets);
+    const key = portfolioToken ? `${MISC_LS_KEY}_${portfolioToken}` : MISC_LS_KEY;
+    localStorage.setItem(key, JSON.stringify(assets));
+    if (portfolioToken) {
+      fetch(`/api/misc?token=${portfolioToken}`, {
+        method: 'POST',
+        body: JSON.stringify(assets),
+      }).catch(() => {});
+    }
+  }, [portfolioToken]);
+
   // 마운트 시: ?token= → KV → localStorage → 샘플 순서로 로드
   useEffect(() => {
     (async () => {
@@ -76,7 +133,10 @@ export default function Home() {
             const file = new File([text], 'portfolio.csv', { type: 'text/csv' });
             const holdings = await parsePortfolioCSV(file);
             setPortfolioToken(urlToken);
-            await handleUpload(holdings);
+            await Promise.all([
+              handleUpload(holdings),
+              loadMiscAssets(urlToken),
+            ]);
             return;
           }
         } catch {
@@ -84,26 +144,34 @@ export default function Home() {
         }
       }
 
-      // 2) localStorage에 저장된 CSV
-      try {
-        const saved = localStorage.getItem('portfolio_csv');
-        if (saved) {
-          const file = new File([saved], 'portfolio.csv', { type: 'text/csv' });
-          const holdings = await parsePortfolioCSV(file);
-          await handleUpload(holdings);
-          return;
+      // 2) localStorage에 저장된 CSV (토큰이 있었으나 KV 실패한 경우만)
+      if (urlToken) {
+        try {
+          const saved = localStorage.getItem('portfolio_csv');
+          if (saved) {
+            const file = new File([saved], 'portfolio.csv', { type: 'text/csv' });
+            const holdings = await parsePortfolioCSV(file);
+            await Promise.all([
+              handleUpload(holdings),
+              loadMiscAssets(urlToken),
+            ]);
+            return;
+          }
+        } catch {
+          localStorage.removeItem('portfolio_csv');
         }
-      } catch {
-        localStorage.removeItem('portfolio_csv');
       }
 
-      // 3) 샘플 로드 (localStorage에 저장 안 함)
+      // 3) 샘플 로드 (토큰 없는 기본 URL 또는 KV/localStorage 모두 실패)
       try {
         const res = await fetch('/sample.csv');
         const text = await res.text();
         const file = new File([text], 'sample.csv', { type: 'text/csv' });
         const holdings = await parsePortfolioCSV(file);
-        await handleUpload(holdings);
+        await Promise.all([
+          handleUpload(holdings),
+          loadMiscAssets(null),
+        ]);
       } catch {
         // 샘플 로드 실패 시 빈 상태 유지
       }
@@ -117,6 +185,14 @@ export default function Home() {
   const portfolioSummary = useMemo(
     () => calcPortfolioSummary(holdingsWithMeta, exchangeRate),
     [holdingsWithMeta, exchangeRate]
+  );
+  const miscTotal = useMemo(
+    () => miscAssets.reduce((sum, a) => sum + a.amount, 0),
+    [miscAssets]
+  );
+  const adjustedSummary = useMemo(
+    () => portfolioSummary ? { ...portfolioSummary, totalEval: portfolioSummary.totalEval + miscTotal } : null,
+    [portfolioSummary, miscTotal]
   );
 
   const handleSelectHolding = (h: ConsolidatedHolding) => {
@@ -235,64 +311,93 @@ export default function Home() {
           </div>
         </div>
       )}
-      {/* 1. 히어로 — 오늘 손익 최우선 */}
-      <HeroSection
-        summary={portfolioSummary}
-        onRefresh={handleRefresh}
-        isRefreshing={loading}
-      />
 
-      {/* 2. 계좌별 카드 */}
-      <AccountCards accounts={accountSummaries} />
-
-      {/* 3. 섹터 차트 + 종목 리스트 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-6">
-        <div className="bg-card border rounded-xl p-4 xl:col-span-2">
-          <h2 className="text-sm font-semibold mb-3">섹터 비중</h2>
-          <SectorChart allocations={sectorAllocations} />
-        </div>
-        <div className="bg-card border rounded-xl p-4 overflow-auto xl:col-span-3">
-          <h2 className="text-sm font-semibold mb-3">종목별 수익률</h2>
-          <StockList holdings={consolidated} onSelect={handleSelectHolding} />
-        </div>
-      </div>
-
-      {/* 4. CSV 다운로드 / 재업로드 / 내 URL */}
-      <div className="flex justify-end gap-4">
-        {portfolioToken && (
+      {/* GNB 탭 */}
+      <div className="flex gap-1 border-b border-border pb-0">
+        {(['portfolio', 'projection'] as const).map((tab) => (
           <button
-            onClick={() => {
-              navigator.clipboard.writeText(window.location.href);
-              setCopyDone(true);
-              setTimeout(() => setCopyDone(false), 2000);
-            }}
-            className="text-xs text-primary hover:text-primary/80 underline"
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === tab
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
           >
-            {copyDone ? '복사됨 ✓' : '내 포트폴리오 URL 복사'}
+            {tab === 'portfolio' ? '포트폴리오' : '미래 예측'}
           </button>
-        )}
+        ))}
       </div>
-      <div className="flex justify-end gap-4">
-        <button
-          onClick={handleDownloadCsv}
-          className="text-xs text-muted-foreground hover:text-foreground underline"
-        >
-          CSV 다운로드
-        </button>
-        <input
-          ref={csvInputRef}
-          type="file"
-          accept=".csv"
-          className="hidden"
-          onChange={handleCsvFileChange}
-        />
-        <button
-          onClick={() => csvInputRef.current?.click()}
-          className="text-xs text-muted-foreground hover:text-foreground underline"
-        >
-          CSV 다시 업로드
-        </button>
-      </div>
+
+      {activeTab === 'portfolio' && (
+        <>
+          {/* 1. 히어로 — 오늘 손익 최우선 */}
+          <HeroSection
+            summary={adjustedSummary}
+            onRefresh={handleRefresh}
+            isRefreshing={loading}
+          />
+
+          {/* 2. 계좌별 카드 */}
+          <AccountCards accounts={accountSummaries} />
+
+          {/* 3. 섹터 차트 + 종목 리스트 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-6">
+            <div className="bg-card border rounded-xl p-4 xl:col-span-2">
+              <h2 className="text-sm font-semibold mb-3">섹터 비중</h2>
+              <SectorChart allocations={sectorAllocations} />
+            </div>
+            <div className="bg-card border rounded-xl p-4 overflow-auto xl:col-span-3">
+              <h2 className="text-sm font-semibold mb-3">종목별 수익률</h2>
+              <StockList holdings={consolidated} onSelect={handleSelectHolding} />
+            </div>
+          </div>
+
+          {/* 4. 기타 자산 */}
+          <MiscAssets assets={miscAssets} onChange={handleMiscAssetsChange} />
+
+          {/* 5. CSV 다운로드 / 재업로드 / 내 URL */}
+          <div className="flex justify-end gap-4">
+            {portfolioToken && (
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                  setCopyDone(true);
+                  setTimeout(() => setCopyDone(false), 2000);
+                }}
+                className="text-xs text-primary hover:text-primary/80 underline"
+              >
+                {copyDone ? '복사됨 ✓' : '내 포트폴리오 URL 복사'}
+              </button>
+            )}
+          </div>
+          <div className="flex justify-end gap-4">
+            <button
+              onClick={handleDownloadCsv}
+              className="text-xs text-muted-foreground hover:text-foreground underline"
+            >
+              CSV 다운로드
+            </button>
+            <input
+              ref={csvInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleCsvFileChange}
+            />
+            <button
+              onClick={() => csvInputRef.current?.click()}
+              className="text-xs text-muted-foreground hover:text-foreground underline"
+            >
+              CSV 다시 업로드
+            </button>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'projection' && (
+        <ProjectionView totalEval={adjustedSummary?.totalEval ?? 0} token={portfolioToken} />
+      )}
 
       {/* 종목 드릴다운 */}
       <StockDetailDrawer

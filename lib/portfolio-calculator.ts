@@ -135,9 +135,7 @@ export function calcAccountSummaries(
     grouped.get(h.계좌)!.push(h);
   }
 
-  const ACCOUNT_ORDER = ['ISA', '연금저축A', '연금저축B', 'CMA', 'IRP'];
-
-  return ACCOUNT_ORDER.filter((a) => grouped.has(a)).map((account) => {
+  return Array.from(grouped.keys()).map((account) => {
     const group = grouped.get(account)!;
     const evalAmount = group.reduce((sum, h) => sum + h.evalAmount, 0);
     const todayGainAmount = group.reduce((sum, h) => sum + h.todayGainAmount, 0);

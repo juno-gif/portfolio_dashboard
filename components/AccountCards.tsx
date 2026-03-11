@@ -10,7 +10,7 @@ interface AccountCardsProps {
 
 export default function AccountCards({ accounts }: AccountCardsProps) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+    <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(140px, 1fr))` }}>
       {accounts.map((acc) => {
         const positive = acc.todayGainAmount >= 0;
         return (

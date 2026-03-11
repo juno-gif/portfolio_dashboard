@@ -81,3 +81,45 @@ export type PriceMap = Record<
   string,
   { currentPrice: number; prevClose: number } | null
 >;
+
+// 미래 자산 예측 관련 타입
+
+export interface OneTimeEvent {
+  type: 'one-time';
+  year: number;
+  amount: number;   // 만원, 음수 허용
+  label: string;
+}
+
+export interface RecurringEvent {
+  type: 'recurring';
+  startAge: number;
+  endAge?: number;          // 없으면 예측 기간 끝까지
+  monthlyAmount: number;    // 만원/월, 음수 허용
+  label: string;
+}
+
+export type CashFlowEvent = OneTimeEvent | RecurringEvent;
+
+export interface ProjectionParams {
+  totalEval: number;          // 현재 자산 (원)
+  currentAge: number;
+  annualReturn: number;       // 0.07 = 7%
+  events: CashFlowEvent[];
+}
+
+export interface MiscAsset {
+  name: string;
+  amount: number; // KRW
+}
+
+export interface ProjectionYear {
+  year: number;
+  age: number;
+  beginAssets: number;        // 기초 (만원)
+  inOut: number;              // 입/출금 합계 (만원)
+  endAssets: number;          // 기말 (만원)
+  gain: number;               // 증감 (만원)
+  monthlyGain: number;        // 증감(월) (만원)
+  hasEvent: boolean;          // 이벤트 있는 행 하이라이트용
+}

@@ -23,13 +23,15 @@ export default function SectorChart({ allocations }: SectorChartProps) {
     );
   }
 
-  const data = allocations.map((a) => ({
-    name: `${a.sector} ${a.ratio.toFixed(1)}%`,
-    value: a.amount,
-    color: a.color,
-    sector: a.sector,
-    ratio: a.ratio,
-  }));
+  const data = [...allocations]
+    .sort((a, b) => b.ratio - a.ratio)
+    .map((a) => ({
+      name: `${a.sector} ${a.ratio.toFixed(1)}%`,
+      value: a.amount,
+      color: a.color,
+      sector: a.sector,
+      ratio: a.ratio,
+    }));
 
   return (
     <ResponsiveContainer width="100%" height={300}>
