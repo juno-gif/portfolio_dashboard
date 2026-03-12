@@ -22,12 +22,13 @@ import StockDetailDrawer from '@/components/StockDetailDrawer';
 import ProjectionView from '@/components/ProjectionView';
 import MiscAssets from '@/components/MiscAssets';
 import SectorManager from '@/components/SectorManager';
+import MarketView from '@/components/MarketView';
 
 const MISC_LS_KEY = 'misc_assets';
 const SECTOR_LS_KEY = 'sector_config';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'portfolio' | 'projection'>('portfolio');
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'projection' | 'market'>('portfolio');
   const [rawHoldings, setRawHoldings] = useState<RawHolding[]>([]);
   const [holdingsWithMeta, setHoldingsWithMeta] = useState<HoldingWithMeta[]>([]);
   const [exchangeRate, setExchangeRate] = useState<number>(1370);
@@ -412,7 +413,7 @@ export default function Home() {
 
       {/* GNB 탭 */}
       <div className="flex gap-1 border-b border-border pb-0">
-        {(['portfolio', 'projection'] as const).map((tab) => (
+        {(['portfolio', 'projection', 'market'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -422,7 +423,7 @@ export default function Home() {
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            {tab === 'portfolio' ? '포트폴리오' : '미래 예측'}
+            {tab === 'portfolio' ? '포트폴리오' : tab === 'projection' ? '미래 예측' : '시장 현황'}
           </button>
         ))}
       </div>
@@ -537,6 +538,8 @@ export default function Home() {
       {activeTab === 'projection' && (
         <ProjectionView totalEval={adjustedSummary?.totalEval ?? 0} token={portfolioToken} />
       )}
+
+      {activeTab === 'market' && <MarketView />}
 
       {/* 종목 드릴다운 */}
       <StockDetailDrawer
