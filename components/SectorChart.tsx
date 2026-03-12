@@ -62,7 +62,21 @@ export default function SectorChart({ allocations }: SectorChartProps) {
             );
           }}
         />
-        <Legend />
+        <Legend
+          content={() => (
+            <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-2 text-xs">
+              {data.map((entry) => (
+                <li key={entry.name} className="flex items-center gap-1">
+                  <span
+                    className="inline-block w-3 h-3 rounded-sm flex-shrink-0"
+                    style={{ backgroundColor: entry.color }}
+                  />
+                  {entry.name}
+                </li>
+              ))}
+            </ul>
+          )}
+        />
       </PieChart>
     </ResponsiveContainer>
   );
