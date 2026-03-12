@@ -12,9 +12,11 @@ import {
 
 interface SectorChartProps {
   allocations: SectorAllocation[];
+  selectedSector?: string | null;
+  onSectorClick?: (sector: string | null) => void;
 }
 
-export default function SectorChart({ allocations }: SectorChartProps) {
+export default function SectorChart({ allocations, selectedSector, onSectorClick }: SectorChartProps) {
   if (allocations.length === 0) {
     return (
       <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
@@ -33,6 +35,11 @@ export default function SectorChart({ allocations }: SectorChartProps) {
       ratio: a.ratio,
     }));
 
+  const handlePieClick = (entry: any) => {
+    if (!onSectorClick) return;
+    onSectorClick(selectedSector === entry.sector ? null : entry.sector);
+  };
+
   return (
     <ResponsiveContainer width="100%" height={300}>
       <PieChart>
@@ -44,9 +51,17 @@ export default function SectorChart({ allocations }: SectorChartProps) {
           outerRadius={100}
           paddingAngle={2}
           dataKey="value"
+          onClick={handlePieClick}
+          style={{ cursor: onSectorClick ? 'pointer' : 'default' }}
         >
           {data.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={entry.color} />
+            <Cell
+              key={`cell-${index}`}
+              fill={entry.color}
+              opacity={!selectedSector || selectedSector === entry.sector ? 1 : 0.25}
+              stroke={selectedSector === entry.sector ? '#fff' : 'none'}
+              strokeWidth={selectedSector === entry.sector ? 2 : 0}
+            />
           ))}
         </Pie>
         <Tooltip
@@ -66,7 +81,15 @@ export default function SectorChart({ allocations }: SectorChartProps) {
           content={() => (
             <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-2 text-xs">
               {data.map((entry) => (
-                <li key={entry.name} className="flex items-center gap-1">
+                <li
+                  key={entry.name}
+                  className="flex items-center gap-1"
+                  onClick={() => handlePieClick(entry)}
+                  style={{
+                    cursor: onSectorClick ? 'pointer' : 'default',
+                    opacity: !selectedSector || selectedSector === entry.sector ? 1 : 0.4,
+                  }}
+                >
                   <span
                     className="inline-block w-3 h-3 rounded-sm flex-shrink-0"
                     style={{ backgroundColor: entry.color }}

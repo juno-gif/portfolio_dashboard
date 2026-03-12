@@ -23,6 +23,7 @@ import ProjectionView from '@/components/ProjectionView';
 import MiscAssets from '@/components/MiscAssets';
 import SectorManager from '@/components/SectorManager';
 import MarketView from '@/components/MarketView';
+import HoldingsHeatmap from '@/components/HoldingsHeatmap';
 
 const MISC_LS_KEY = 'misc_assets';
 const SECTOR_LS_KEY = 'sector_config';
@@ -41,6 +42,7 @@ export default function Home() {
   const [copyDone, setCopyDone] = useState(false);
   const [miscAssets, setMiscAssets] = useState<MiscAsset[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selectedSector, setSelectedSector] = useState<string | null>(null);
   const [sectorDefs, setSectorDefs] = useState<SectorDef[]>(DEFAULT_SECTORS);
   const [sectorOverrides, setSectorOverrides] = useState<Record<string, string>>({});
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -262,6 +264,10 @@ export default function Home() {
     () => portfolioSummary ? { ...portfolioSummary, totalEval: portfolioSummary.totalEval + miscTotal } : null,
     [portfolioSummary, miscTotal]
   );
+  const sectorHoldings = useMemo(
+    () => selectedSector ? consolidated.filter((h) => h.sector === selectedSector) : [],
+    [consolidated, selectedSector]
+  );
 
   const handleSelectHolding = (h: ConsolidatedHolding) => {
     setSelectedHolding(h);
@@ -444,13 +450,83 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-6">
             <div className="bg-card border rounded-xl p-4 xl:col-span-2">
               <h2 className="text-sm font-semibold mb-3">섹터 비중</h2>
-              <SectorChart allocations={sectorAllocations} />
+              <SectorChart
+                allocations={sectorAllocations}
+                selectedSector={selectedSector}
+                onSectorClick={setSelectedSector}
+              />
             </div>
             <div className="bg-card border rounded-xl p-4 overflow-auto xl:col-span-3">
               <h2 className="text-sm font-semibold mb-3">종목별 수익률</h2>
               <StockList holdings={consolidated} onSelect={handleSelectHolding} />
             </div>
           </div>
+
+          {/* 3-1. 섹터 클릭 상세 패널 */}
+          {selectedSector && sectorHoldings.length > 0 && (() => {
+            const alloc = sectorAllocations.find((a) => a.sector === selectedSector);
+            return (
+              <div className="bg-card border rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-3 h-3 rounded-sm flex-shrink-0"
+                      style={{ backgroundColor: alloc?.color ?? '#6b7280' }}
+                    />
+                    <h2 className="text-sm font-semibold">{selectedSector}</h2>
+                    <span className="text-xs text-muted-foreground">
+                      {alloc?.ratio.toFixed(1)}% · ₩{alloc?.amount.toLocaleString('ko-KR')}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setSelectedSector(null)}
+                    className="text-muted-foreground hover:text-foreground text-xs"
+                  >
+                    ✕ 닫기
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-muted-foreground border-b">
+                        <th className="text-left pb-2 font-medium">종목명</th>
+                        <th className="text-right pb-2 font-medium">평가금액</th>
+                        <th className="text-right pb-2 font-medium">오늘 수익률</th>
+                        <th className="text-right pb-2 font-medium">오늘 손익</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sectorHoldings
+                        .sort((a, b) => b.evalAmount - a.evalAmount)
+                        .map((h) => {
+                          const isUp = h.todayGainRate >= 0;
+                          const color = isUp ? 'text-red-500' : 'text-blue-500';
+                          return (
+                            <tr
+                              key={h.종목번호}
+                              className="border-b last:border-0 hover:bg-muted/50 cursor-pointer"
+                              onClick={() => handleSelectHolding(h)}
+                            >
+                              <td className="py-2 font-medium">{h.종목명}</td>
+                              <td className="py-2 text-right">₩{h.evalAmount.toLocaleString('ko-KR')}</td>
+                              <td className={`py-2 text-right font-medium ${color}`}>
+                                {isUp ? '+' : ''}{h.todayGainRate.toFixed(2)}%
+                              </td>
+                              <td className={`py-2 text-right ${color}`}>
+                                {isUp ? '+' : ''}₩{h.todayGainAmount.toLocaleString('ko-KR')}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* 3-2. 보유종목 히트맵 */}
+          <HoldingsHeatmap holdings={consolidated} onSelect={handleSelectHolding} />
 
           {/* 4. 기타 자산 */}
           <MiscAssets assets={miscAssets} sectors={sectorDefs} onChange={handleMiscAssetsChange} />
