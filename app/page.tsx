@@ -39,6 +39,7 @@ export default function Home() {
   const [portfolioToken, setPortfolioToken] = useState<string | null>(null);
   const [copyDone, setCopyDone] = useState(false);
   const [miscAssets, setMiscAssets] = useState<MiscAsset[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [sectorDefs, setSectorDefs] = useState<SectorDef[]>(DEFAULT_SECTORS);
   const [sectorOverrides, setSectorOverrides] = useState<Record<string, string>>({});
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -266,6 +267,32 @@ export default function Home() {
     setDrawerOpen(true);
   };
 
+  const handleDeleteAll = async () => {
+    if (portfolioToken) {
+      await fetch(`/api/delete?token=${portfolioToken}`, { method: 'DELETE' }).catch(() => {});
+      // localStorage 정리
+      const keys = [
+        'portfolio_csv',
+        `misc_assets_${portfolioToken}`,
+        `sector_config_${portfolioToken}`,
+        `projection_params_${portfolioToken}`,
+      ];
+      keys.forEach((k) => localStorage.removeItem(k));
+    } else {
+      // 토큰 없을 때는 localStorage만
+      ['portfolio_csv', 'misc_assets', 'sector_config'].forEach((k) => localStorage.removeItem(k));
+    }
+    // 상태 초기화 + URL에서 토큰 제거
+    setPortfolioToken(null);
+    setRawHoldings([]);
+    setHoldingsWithMeta([]);
+    setMiscAssets([]);
+    setSectorDefs(DEFAULT_SECTORS);
+    setSectorOverrides({});
+    setShowDeleteConfirm(false);
+    window.history.replaceState({}, '', window.location.pathname);
+  };
+
   const handleDownloadCsv = () => {
     const q = (s: string) => `"${s.replace(/"/g, '""')}"`;
     const header = '계좌,종목명,종목번호,수량,평균단가,단위';
@@ -378,6 +405,11 @@ export default function Home() {
         </div>
       )}
 
+      {/* 타이틀 */}
+      <div className="flex items-center gap-2 pb-1">
+        <h1 className="text-xl font-bold tracking-tight">내 자산관리</h1>
+      </div>
+
       {/* GNB 탭 */}
       <div className="flex gap-1 border-b border-border pb-0">
         {(['portfolio', 'projection'] as const).map((tab) => (
@@ -445,7 +477,7 @@ export default function Home() {
               </button>
             )}
           </div>
-          <div className="flex justify-end gap-4">
+          <div className="flex justify-end gap-4 items-center">
             <button
               onClick={handleDownloadCsv}
               className="text-xs text-muted-foreground hover:text-foreground underline"
@@ -465,7 +497,40 @@ export default function Home() {
             >
               CSV 다시 업로드
             </button>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-xs text-destructive/70 hover:text-destructive underline"
+            >
+              데이터 삭제
+            </button>
           </div>
+
+          {/* 데이터 삭제 확인 모달 */}
+          {showDeleteConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+              <div className="bg-background border rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+                <h3 className="text-sm font-semibold">데이터 삭제</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  저장된 데이터와 토큰이 모두 삭제됩니다.<br />
+                  계속하시겠습니까?
+                </p>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="px-4 py-1.5 text-xs rounded-md border hover:bg-muted transition-colors"
+                  >
+                    아니오
+                  </button>
+                  <button
+                    onClick={handleDeleteAll}
+                    className="px-4 py-1.5 text-xs rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+                  >
+                    네
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
 
