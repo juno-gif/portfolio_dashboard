@@ -29,6 +29,8 @@ export default function SectorManager({
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState(PRESET_COLORS[8]);
   const [error, setError] = useState('');
+  const [editingName, setEditingName] = useState<string | null>(null); // 편집 중인 섹터의 현재 이름
+  const [editingValue, setEditingValue] = useState('');
 
   const inputCls =
     'border border-input rounded-md px-2 py-1.5 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-ring';
@@ -58,6 +60,45 @@ export default function SectorManager({
     if (used.has(name)) return; // 사용 중이면 삭제 불가
     const next = sectors.filter((s) => s.name !== name);
     onChange(next, overrides);
+  }
+
+  function startEdit(name: string) {
+    setEditingName(name);
+    setEditingValue(name);
+    setError('');
+  }
+
+  function confirmEdit(oldName: string) {
+    const newNameTrimmed = editingValue.trim();
+    setEditingName(null);
+    if (!newNameTrimmed || newNameTrimmed === oldName) return;
+    if (sectors.find((s) => s.name === newNameTrimmed)) {
+      setError(`'${newNameTrimmed}'은(는) 이미 존재하는 섹터입니다`);
+      return;
+    }
+
+    // 1) sectorDefs 이름 업데이트
+    const nextSectors = sectors.map((s) =>
+      s.name === oldName ? { ...s, name: newNameTrimmed } : s
+    );
+
+    // 2) 기존 overrides에서 oldName → newName 마이그레이션
+    const nextOverrides: Record<string, string> = {};
+    for (const [ticker, sectorName] of Object.entries(overrides)) {
+      nextOverrides[ticker] = sectorName === oldName ? newNameTrimmed : sectorName;
+    }
+
+    // 3) 자동 매칭(override 없음)으로 oldName에 배정된 종목들도 새 이름으로 고정
+    const uniqueHoldings = Array.from(
+      new Map(holdings.map((h) => [h.종목번호, h])).values()
+    );
+    for (const h of uniqueHoldings) {
+      if (!overrides[h.종목번호] && tagSector(h) === oldName) {
+        nextOverrides[h.종목번호] = newNameTrimmed;
+      }
+    }
+
+    onChange(nextSectors, nextOverrides);
   }
 
   function resetSectors() {
@@ -118,30 +159,57 @@ export default function SectorManager({
             <div className="space-y-1.5">
               {sectors.map((s) => {
                 const canDelete = !used.has(s.name);
+                const isEditing = editingName === s.name;
                 return (
                   <div
                     key={s.name}
-                    className="flex items-center justify-between text-xs bg-muted rounded-md px-3 py-2"
+                    className="flex items-center justify-between text-xs bg-muted rounded-md px-3 py-2 gap-2"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
                       <span
                         className="w-3 h-3 rounded-sm flex-shrink-0"
                         style={{ backgroundColor: s.color }}
                       />
-                      <span className="font-medium">{s.name}</span>
+                      {isEditing ? (
+                        <input
+                          autoFocus
+                          type="text"
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') confirmEdit(s.name);
+                            if (e.key === 'Escape') setEditingName(null);
+                          }}
+                          onBlur={() => confirmEdit(s.name)}
+                          className="border border-input rounded px-1.5 py-0.5 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-ring w-full"
+                        />
+                      ) : (
+                        <span className="font-medium truncate">{s.name}</span>
+                      )}
                     </div>
-                    <button
-                      onClick={() => deleteSector(s.name)}
-                      disabled={!canDelete}
-                      title={canDelete ? '삭제' : '이 섹터를 사용 중인 종목이 있어 삭제할 수 없습니다'}
-                      className={`transition-colors ${
-                        canDelete
-                          ? 'text-muted-foreground hover:text-destructive'
-                          : 'text-muted-foreground/30 cursor-not-allowed'
-                      }`}
-                    >
-                      ✕
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {!isEditing && (
+                        <button
+                          onClick={() => startEdit(s.name)}
+                          title="이름 편집"
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          ✎
+                        </button>
+                      )}
+                      <button
+                        onClick={() => deleteSector(s.name)}
+                        disabled={!canDelete}
+                        title={canDelete ? '삭제' : '이 섹터를 사용 중인 종목이 있어 삭제할 수 없습니다'}
+                        className={`transition-colors ${
+                          canDelete
+                            ? 'text-muted-foreground hover:text-destructive'
+                            : 'text-muted-foreground/30 cursor-not-allowed'
+                        }`}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
                 );
               })}
