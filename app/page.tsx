@@ -457,73 +457,24 @@ export default function Home() {
               />
             </div>
             <div className="bg-card border rounded-xl p-4 overflow-auto xl:col-span-3">
-              <h2 className="text-sm font-semibold mb-3">종목별 수익률</h2>
-              <StockList holdings={consolidated} onSelect={handleSelectHolding} />
-            </div>
-          </div>
-
-          {/* 3-1. 섹터 클릭 상세 패널 */}
-          {selectedSector && sectorHoldings.length > 0 && (() => {
-            const alloc = sectorAllocations.find((a) => a.sector === selectedSector);
-            return (
-              <div className="bg-card border rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-3 h-3 rounded-sm flex-shrink-0"
-                      style={{ backgroundColor: alloc?.color ?? '#6b7280' }}
-                    />
-                    <h2 className="text-sm font-semibold">{selectedSector}</h2>
-                    <span className="text-xs text-muted-foreground">
-                      {alloc?.ratio.toFixed(1)}% · ₩{alloc?.amount.toLocaleString('ko-KR')}
-                    </span>
-                  </div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold">종목별 수익률</h2>
+                {selectedSector && (
                   <button
                     onClick={() => setSelectedSector(null)}
-                    className="text-muted-foreground hover:text-foreground text-xs"
+                    className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full hover:bg-muted/70 transition-colors"
                   >
-                    ✕ 닫기
+                    <span>{selectedSector}</span>
+                    <span className="text-muted-foreground">✕</span>
                   </button>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-muted-foreground border-b">
-                        <th className="text-left pb-2 font-medium">종목명</th>
-                        <th className="text-right pb-2 font-medium">평가금액</th>
-                        <th className="text-right pb-2 font-medium">오늘 수익률</th>
-                        <th className="text-right pb-2 font-medium">오늘 손익</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sectorHoldings
-                        .sort((a, b) => b.evalAmount - a.evalAmount)
-                        .map((h) => {
-                          const isUp = h.todayGainRate >= 0;
-                          const color = isUp ? 'text-red-500' : 'text-blue-500';
-                          return (
-                            <tr
-                              key={h.종목번호}
-                              className="border-b last:border-0 hover:bg-muted/50 cursor-pointer"
-                              onClick={() => handleSelectHolding(h)}
-                            >
-                              <td className="py-2 font-medium">{h.종목명}</td>
-                              <td className="py-2 text-right">₩{h.evalAmount.toLocaleString('ko-KR')}</td>
-                              <td className={`py-2 text-right font-medium ${color}`}>
-                                {isUp ? '+' : ''}{h.todayGainRate.toFixed(2)}%
-                              </td>
-                              <td className={`py-2 text-right ${color}`}>
-                                {isUp ? '+' : ''}₩{h.todayGainAmount.toLocaleString('ko-KR')}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
+                )}
               </div>
-            );
-          })()}
+              <StockList
+                holdings={selectedSector ? sectorHoldings : consolidated}
+                onSelect={handleSelectHolding}
+              />
+            </div>
+          </div>
 
           {/* 3-2. 보유종목 히트맵 */}
           <HoldingsHeatmap holdings={consolidated} onSelect={handleSelectHolding} />
