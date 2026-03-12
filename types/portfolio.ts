@@ -7,15 +7,18 @@ export interface RawHolding {
   단위: 'KRW' | 'USD';
 }
 
-export type SectorKey =
-  | '미국지수'
-  | '국내지수'
-  | '금'
-  | '방산/테마'
-  | '채권/혼합'
-  | '해외기타'
-  | '개별주'
-  | '기타';
+// 커스텀 섹터 추가를 지원하기 위해 string으로 확장
+export type SectorKey = string;
+
+export interface SectorDef {
+  name: string;
+  color: string;
+}
+
+export interface SectorConfigStore {
+  sectors: SectorDef[];
+  overrides: Record<string, string>; // 종목번호 → 섹터명
+}
 
 export interface HoldingWithMeta extends RawHolding {
   sector: SectorKey;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { RawHolding, HoldingWithMeta, ConsolidatedHolding, MiscAsset } from '@/types/portfolio';
+import { RawHolding, HoldingWithMeta, ConsolidatedHolding, MiscAsset, SectorDef } from '@/types/portfolio';
 import {
   enrichHoldings,
   consolidateHoldings,
@@ -9,8 +9,10 @@ import {
   calcSectorAllocations,
   calcPortfolioSummary,
 } from '@/lib/portfolio-calculator';
+import { DEFAULT_SECTORS } from '@/lib/sector-config';
 import { fetchPrices, fetchExchangeRate } from '@/lib/price-fetcher';
 import { parsePortfolioCSV } from '@/lib/csv-parser';
+import { tagSector } from '@/lib/sector-tagger';
 import { Skeleton } from '@/components/ui/skeleton';
 import HeroSection from '@/components/HeroSection';
 import AccountCards from '@/components/AccountCards';
@@ -19,8 +21,10 @@ import StockList from '@/components/StockList';
 import StockDetailDrawer from '@/components/StockDetailDrawer';
 import ProjectionView from '@/components/ProjectionView';
 import MiscAssets from '@/components/MiscAssets';
+import SectorManager from '@/components/SectorManager';
 
 const MISC_LS_KEY = 'misc_assets';
+const SECTOR_LS_KEY = 'sector_config';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'portfolio' | 'projection'>('portfolio');
@@ -35,10 +39,15 @@ export default function Home() {
   const [portfolioToken, setPortfolioToken] = useState<string | null>(null);
   const [copyDone, setCopyDone] = useState(false);
   const [miscAssets, setMiscAssets] = useState<MiscAsset[]>([]);
+  const [sectorDefs, setSectorDefs] = useState<SectorDef[]>(DEFAULT_SECTORS);
+  const [sectorOverrides, setSectorOverrides] = useState<Record<string, string>>({});
   const csvInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
 
-  const loadPrices = useCallback(async (holdings: RawHolding[]) => {
+  const loadPrices = useCallback(async (
+    holdings: RawHolding[],
+    overrides: Record<string, string> = {}
+  ) => {
     setLoading(true);
     try {
       const [rate, priceMap] = await Promise.all([
@@ -46,7 +55,7 @@ export default function Home() {
         fetchPrices(holdings),
       ]);
       setExchangeRate(rate);
-      const enriched = enrichHoldings(holdings, priceMap, rate);
+      const enriched = enrichHoldings(holdings, priceMap, rate, overrides);
       setHoldingsWithMeta(enriched);
       setLastUpdated(
         new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
@@ -57,16 +66,16 @@ export default function Home() {
   }, []);
 
   const handleUpload = useCallback(
-    async (holdings: RawHolding[]) => {
+    async (holdings: RawHolding[], overrides: Record<string, string> = {}) => {
       setRawHoldings(holdings);
-      await loadPrices(holdings);
+      await loadPrices(holdings, overrides);
     },
     [loadPrices]
   );
 
   const handleRefresh = useCallback(() => {
-    if (rawHoldings.length > 0) loadPrices(rawHoldings);
-  }, [rawHoldings, loadPrices]);
+    if (rawHoldings.length > 0) loadPrices(rawHoldings, sectorOverrides);
+  }, [rawHoldings, loadPrices, sectorOverrides]);
 
   // 기타 자산 로드: KV(토큰 있을 때) → localStorage 순
   const loadMiscAssets = useCallback(async (token: string | null) => {
@@ -107,6 +116,60 @@ export default function Home() {
     }
   }, []);
 
+  // 섹터 config 로드: KV(토큰 있을 때) → localStorage 순
+  const loadSectorConfig = useCallback(async (token: string | null): Promise<Record<string, string>> => {
+    if (token) {
+      try {
+        const res = await fetch(`/api/sector?token=${token}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.sectors) setSectorDefs(data.sectors);
+          if (data.overrides) setSectorOverrides(data.overrides);
+          return data.overrides ?? {};
+        }
+      } catch { /* fallback */ }
+    }
+    const lsKey = token ? `${SECTOR_LS_KEY}_${token}` : SECTOR_LS_KEY;
+    try {
+      const raw = localStorage.getItem(lsKey);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data.sectors) setSectorDefs(data.sectors);
+        if (data.overrides) setSectorOverrides(data.overrides);
+        if (token) {
+          fetch(`/api/sector?token=${token}`, {
+            method: 'POST',
+            body: raw,
+          }).catch(() => {});
+        }
+        return data.overrides ?? {};
+      }
+    } catch { /* ignore */ }
+    return {};
+  }, []);
+
+  const saveSectorConfig = useCallback((defs: SectorDef[], overrides: Record<string, string>) => {
+    const payload = JSON.stringify({ sectors: defs, overrides });
+    const lsKey = portfolioToken ? `${SECTOR_LS_KEY}_${portfolioToken}` : SECTOR_LS_KEY;
+    localStorage.setItem(lsKey, payload);
+    if (portfolioToken) {
+      fetch(`/api/sector?token=${portfolioToken}`, {
+        method: 'POST',
+        body: payload,
+      }).catch(() => {});
+    }
+  }, [portfolioToken]);
+
+  const handleSectorConfigChange = useCallback((defs: SectorDef[], overrides: Record<string, string>) => {
+    setSectorDefs(defs);
+    setSectorOverrides(overrides);
+    saveSectorConfig(defs, overrides);
+    // sector 필드만 즉시 재태깅 (가격 재조회 불필요)
+    setHoldingsWithMeta((prev) =>
+      prev.map((h) => ({ ...h, sector: overrides[h.종목번호] ?? tagSector(h) }))
+    );
+  }, [saveSectorConfig]);
+
   const handleMiscAssetsChange = useCallback((assets: MiscAsset[]) => {
     setMiscAssets(assets);
     const key = portfolioToken ? `${MISC_LS_KEY}_${portfolioToken}` : MISC_LS_KEY;
@@ -133,10 +196,11 @@ export default function Home() {
             const file = new File([text], 'portfolio.csv', { type: 'text/csv' });
             const holdings = await parsePortfolioCSV(file);
             setPortfolioToken(urlToken);
-            await Promise.all([
-              handleUpload(holdings),
+            const [, overrides] = await Promise.all([
               loadMiscAssets(urlToken),
+              loadSectorConfig(urlToken),
             ]);
+            await handleUpload(holdings, overrides);
             return;
           }
         } catch {
@@ -151,10 +215,11 @@ export default function Home() {
           if (saved) {
             const file = new File([saved], 'portfolio.csv', { type: 'text/csv' });
             const holdings = await parsePortfolioCSV(file);
-            await Promise.all([
-              handleUpload(holdings),
+            const [, overrides] = await Promise.all([
               loadMiscAssets(urlToken),
+              loadSectorConfig(urlToken),
             ]);
+            await handleUpload(holdings, overrides);
             return;
           }
         } catch {
@@ -168,10 +233,11 @@ export default function Home() {
         const text = await res.text();
         const file = new File([text], 'sample.csv', { type: 'text/csv' });
         const holdings = await parsePortfolioCSV(file);
-        await Promise.all([
-          handleUpload(holdings),
+        const [, overrides] = await Promise.all([
           loadMiscAssets(null),
+          loadSectorConfig(null),
         ]);
+        await handleUpload(holdings, overrides);
       } catch {
         // 샘플 로드 실패 시 빈 상태 유지
       }
@@ -181,7 +247,7 @@ export default function Home() {
 
   const consolidated = useMemo(() => consolidateHoldings(holdingsWithMeta), [holdingsWithMeta]);
   const accountSummaries = useMemo(() => calcAccountSummaries(holdingsWithMeta), [holdingsWithMeta]);
-  const sectorAllocations = useMemo(() => calcSectorAllocations(holdingsWithMeta), [holdingsWithMeta]);
+  const sectorAllocations = useMemo(() => calcSectorAllocations(holdingsWithMeta, sectorDefs), [holdingsWithMeta, sectorDefs]);
   const portfolioSummary = useMemo(
     () => calcPortfolioSummary(holdingsWithMeta, exchangeRate),
     [holdingsWithMeta, exchangeRate]
@@ -355,6 +421,14 @@ export default function Home() {
 
           {/* 4. 기타 자산 */}
           <MiscAssets assets={miscAssets} onChange={handleMiscAssetsChange} />
+
+          {/* 5. 섹터 관리 */}
+          <SectorManager
+            sectors={sectorDefs}
+            overrides={sectorOverrides}
+            holdings={rawHoldings}
+            onChange={handleSectorConfigChange}
+          />
 
           {/* 5. CSV 다운로드 / 재업로드 / 내 URL */}
           <div className="flex justify-end gap-4">

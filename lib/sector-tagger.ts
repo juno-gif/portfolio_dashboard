@@ -1,7 +1,7 @@
-import { RawHolding, SectorKey } from '@/types/portfolio';
+import { RawHolding } from '@/types/portfolio';
 
 // 섹터별 키워드 규칙 (우선순위 순서대로 체크)
-const SECTOR_RULES: { sector: SectorKey; keywords: string[] }[] = [
+const SECTOR_RULES: { sector: string; keywords: string[] }[] = [
   {
     sector: '금',
     keywords: ['금현물', 'KRX금', 'GOLD'],
@@ -28,7 +28,13 @@ const SECTOR_RULES: { sector: SectorKey; keywords: string[] }[] = [
   },
 ];
 
-export function tagSector(holding: RawHolding): SectorKey {
+export function tagSector(
+  holding: RawHolding,
+  overrides: Record<string, string> = {}
+): string {
+  // 수동 오버라이드 우선 적용
+  if (overrides[holding.종목번호]) return overrides[holding.종목번호];
+
   const name = holding.종목명;
 
   // 우선순위에 따라 순서대로 키워드 매칭 (대소문자 무시)
@@ -41,9 +47,6 @@ export function tagSector(holding: RawHolding): SectorKey {
   }
 
   // 키워드 미매칭 시: USD면 미국지수, KRW면 개별주
-  if (holding.단위 === 'USD') {
-    return '미국지수';
-  }
-
+  if (holding.단위 === 'USD') return '미국지수';
   return '개별주';
 }

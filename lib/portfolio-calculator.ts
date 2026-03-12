@@ -4,31 +4,22 @@ import {
   ConsolidatedHolding,
   AccountSummary,
   SectorAllocation,
-  SectorKey,
+  SectorDef,
   PortfolioSummary,
   PriceMap,
 } from '@/types/portfolio';
 import { tagSector } from '@/lib/sector-tagger';
-
-const SECTOR_COLORS: Record<SectorKey, string> = {
-  '미국지수': '#3B82F6',
-  '국내지수': '#10B981',
-  '금': '#F59E0B',
-  '방산/테마': '#EF4444',
-  '채권/혼합': '#8B5CF6',
-  '해외기타': '#06B6D4',
-  '개별주': '#F97316',
-  '기타': '#6B7280',
-};
+import { DEFAULT_SECTORS, getSectorColor } from '@/lib/sector-config';
 
 // 원시 보유종목 + 가격맵 → HoldingWithMeta 계산
 export function enrichHoldings(
   holdings: RawHolding[],
   priceMap: PriceMap,
-  exchangeRate: number
+  exchangeRate: number,
+  overrides: Record<string, string> = {}
 ): HoldingWithMeta[] {
   return holdings.map((h) => {
-    const sector = tagSector(h);
+    const sector = tagSector(h, overrides);
     const priceData = priceMap[h.종목번호];
     const priceUnavailable = priceData === null || priceData === undefined;
 
@@ -152,9 +143,10 @@ export function calcAccountSummaries(
 
 // 섹터별 비중
 export function calcSectorAllocations(
-  holdings: HoldingWithMeta[]
+  holdings: HoldingWithMeta[],
+  sectors: SectorDef[] = DEFAULT_SECTORS
 ): SectorAllocation[] {
-  const sectorMap = new Map<SectorKey, number>();
+  const sectorMap = new Map<string, number>();
 
   for (const h of holdings) {
     const current = sectorMap.get(h.sector) ?? 0;
@@ -168,7 +160,7 @@ export function calcSectorAllocations(
       sector,
       amount,
       ratio: totalEval > 0 ? (amount / totalEval) * 100 : 0,
-      color: SECTOR_COLORS[sector],
+      color: getSectorColor(sector, sectors),
     }))
     .sort((a, b) => b.amount - a.amount);
 }
