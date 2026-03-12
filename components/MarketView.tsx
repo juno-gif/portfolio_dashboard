@@ -9,13 +9,20 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import type { MarketItem } from '@/app/api/market/route';
+import type { MarketItem, MarketGroup } from '@/app/api/market/route';
 
 function fmt(value: number, unit: string): string {
-  if (unit === '원' || unit === 'pt') {
-    return value.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+  if (unit === 'pt') {
+    return value >= 1000
+      ? value.toLocaleString('ko-KR', { maximumFractionDigits: 2 })
+      : value.toFixed(2);
   }
-  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (unit === '원') return value.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+  if (unit === '%') return value.toFixed(2);
+  // $
+  if (value >= 10000) return value.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  if (value >= 100)   return value.toLocaleString('en-US', { maximumFractionDigits: 1 });
+  return value.toFixed(2);
 }
 
 function MarketCard({ item }: { item: MarketItem }) {
@@ -23,58 +30,51 @@ function MarketCard({ item }: { item: MarketItem }) {
   const changeRate = item.prevClose > 0 ? (change / item.prevClose) * 100 : 0;
   const isUp = change >= 0;
 
-  // Recharts용 데이터: x축 날짜를 일부만 표시
   const chartData = item.dates.map((d, i) => ({ date: d, price: item.prices[i] }));
-
-  // y축 도메인에 약간의 여유
   const minPrice = Math.min(...item.prices);
   const maxPrice = Math.max(...item.prices);
-  const pad = (maxPrice - minPrice) * 0.1 || maxPrice * 0.01;
+  const pad = (maxPrice - minPrice) * 0.08 || maxPrice * 0.01;
   const yDomain: [number, number] = [minPrice - pad, maxPrice + pad];
 
-  // x축 틱: 첫날, 매월 초, 마지막날 (최대 4개)
-  const tickIndices = new Set<number>([0, chartData.length - 1]);
-  for (let i = 1; i < chartData.length - 1; i++) {
-    if (chartData[i].date.endsWith('/01') || chartData[i].date.endsWith('/02')) {
-      tickIndices.add(i);
-    }
+  // 월 경계 틱만 표시
+  const tickDates = new Set<string>();
+  tickDates.add(chartData[0]?.date);
+  tickDates.add(chartData[chartData.length - 1]?.date);
+  for (const d of chartData) {
+    if (d.date.endsWith('/01') || d.date.endsWith('/02')) tickDates.add(d.date);
   }
-  const tickDates = new Set(Array.from(tickIndices).map((i) => chartData[i]?.date));
 
   const priceColor = isUp ? '#e11d48' : '#2563eb';
-  const strokeColor = isUp ? '#e11d48' : '#2563eb';
   const fillId = `fill-${item.symbol.replace(/[^a-zA-Z0-9]/g, '')}`;
 
   return (
     <div className="bg-card border rounded-xl p-4 flex flex-col gap-2">
-      {/* 헤더 */}
       <div className="flex items-start justify-between gap-2">
-        <span className="text-xs text-muted-foreground font-medium">{item.name}</span>
-        <div className="text-right">
+        <span className="text-xs text-muted-foreground font-medium leading-tight">{item.name}</span>
+        <div className="text-right shrink-0">
           <p className="text-base font-bold leading-tight" style={{ color: priceColor }}>
             {fmt(item.currentPrice, item.unit)}
             <span className="text-xs font-normal ml-1">{item.unit}</span>
           </p>
           <p className="text-xs" style={{ color: priceColor }}>
-            {isUp ? '▲' : '▼'} {Math.abs(change).toLocaleString('ko-KR', { maximumFractionDigits: 2 })}
+            {isUp ? '▲' : '▼'} {fmt(Math.abs(change), item.unit)}
             {' '}({isUp ? '+' : ''}{changeRate.toFixed(2)}%)
           </p>
         </div>
       </div>
 
-      {/* 차트 */}
-      <div className="h-[120px]">
+      <div className="h-[110px]">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+          <AreaChart data={chartData} margin={{ top: 4, right: 2, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={strokeColor} stopOpacity={0.15} />
-                <stop offset="95%" stopColor={strokeColor} stopOpacity={0} />
+                <stop offset="5%"  stopColor={priceColor} stopOpacity={0.15} />
+                <stop offset="95%" stopColor={priceColor} stopOpacity={0} />
               </linearGradient>
             </defs>
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 9, fill: 'var(--muted-foreground)' }}
+              tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
               tickLine={false}
               axisLine={false}
               interval="preserveStartEnd"
@@ -96,7 +96,7 @@ function MarketCard({ item }: { item: MarketItem }) {
             <Area
               type="monotone"
               dataKey="price"
-              stroke={strokeColor}
+              stroke={priceColor}
               strokeWidth={1.5}
               fill={`url(#${fillId})`}
               dot={false}
@@ -109,8 +109,25 @@ function MarketCard({ item }: { item: MarketItem }) {
   );
 }
 
+function GroupSection({ group, items }: { group: string; items: (MarketItem | null)[] }) {
+  const valid = items.filter(Boolean) as MarketItem[];
+  if (valid.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-0.5">
+        {group}
+      </h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {items.map((item, i) =>
+          item ? <MarketCard key={item.symbol} item={item} /> : <div key={i} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function MarketView() {
-  const [items, setItems] = useState<(MarketItem | null)[]>([]);
+  const [groups, setGroups] = useState<MarketGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState('');
 
@@ -119,8 +136,7 @@ export default function MarketView() {
       try {
         const res = await fetch('/api/market');
         if (res.ok) {
-          const data = await res.json();
-          setItems(data);
+          setGroups(await res.json());
           setUpdatedAt(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }));
         }
       } finally {
@@ -131,31 +147,34 @@ export default function MarketView() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="bg-card border rounded-xl p-4 h-[196px] animate-pulse">
-            <div className="h-3 bg-muted rounded w-1/3 mb-2" />
-            <div className="h-6 bg-muted rounded w-1/2 mb-4" />
-            <div className="h-[120px] bg-muted rounded" />
+      <div className="space-y-6">
+        {[2, 3, 4, 4].map((count, gi) => (
+          <div key={gi} className="space-y-2">
+            <div className="h-3 bg-muted rounded w-24 animate-pulse" />
+            <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4`}>
+              {[...Array(count)].map((_, i) => (
+                <div key={i} className="bg-card border rounded-xl p-4 h-[188px] animate-pulse">
+                  <div className="h-3 bg-muted rounded w-1/3 mb-2" />
+                  <div className="h-6 bg-muted rounded w-1/2 mb-4" />
+                  <div className="h-[110px] bg-muted rounded" />
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
     );
   }
 
-  const validItems = items.filter(Boolean) as MarketItem[];
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">최근 3개월 일봉 기준 · Yahoo Finance</p>
+        <p className="text-xs text-muted-foreground">최근 3개월 일봉 · Yahoo Finance</p>
         {updatedAt && <p className="text-xs text-muted-foreground">조회 {updatedAt}</p>}
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {validItems.map((item) => (
-          <MarketCard key={item.symbol} item={item} />
-        ))}
-      </div>
+      {groups.map((g) => (
+        <GroupSection key={g.group} group={g.group} items={g.items} />
+      ))}
     </div>
   );
 }
