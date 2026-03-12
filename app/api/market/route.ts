@@ -19,16 +19,19 @@ const SYMBOL_GROUPS: { group: string; items: { symbol: string; name: string; uni
   {
     group: '국내 증시',
     items: [
-      { symbol: '^KS11',    name: '코스피',          unit: 'pt' },
-      { symbol: '^KQ11',    name: '코스닥',          unit: 'pt' },
+      { symbol: '^KS11',    name: '코스피',                       unit: 'pt' },
+      { symbol: '^KQ11',    name: '코스닥',                       unit: 'pt' },
+      { symbol: '^KS200',   name: '코스피 200',                   unit: 'pt' },
+      { symbol: 'EWY',      name: 'iShares MSCI 한국 ETF (EWY)', unit: '$'  },
     ],
   },
   {
     group: '미국 증시',
     items: [
-      { symbol: '^GSPC',    name: 'S&P 500',        unit: 'pt' },
-      { symbol: '^IXIC',    name: '나스닥',          unit: 'pt' },
-      { symbol: '^VIX',     name: '공포지수 (VIX)',  unit: 'pt' },
+      { symbol: '^DJI',     name: '다우존스',         unit: 'pt' },
+      { symbol: '^GSPC',    name: 'S&P 500',         unit: 'pt' },
+      { symbol: '^IXIC',    name: '나스닥',           unit: 'pt' },
+      { symbol: '^VIX',     name: '공포지수 (VIX)',   unit: 'pt' },
     ],
   },
   {
