@@ -5,6 +5,7 @@ import {
   AccountSummary,
   SectorAllocation,
   SectorDef,
+  MiscAsset,
   PortfolioSummary,
   PriceMap,
 } from '@/types/portfolio';
@@ -144,13 +145,20 @@ export function calcAccountSummaries(
 // 섹터별 비중
 export function calcSectorAllocations(
   holdings: HoldingWithMeta[],
-  sectors: SectorDef[] = DEFAULT_SECTORS
+  sectors: SectorDef[] = DEFAULT_SECTORS,
+  miscAssets: MiscAsset[] = []
 ): SectorAllocation[] {
   const sectorMap = new Map<string, number>();
 
   for (const h of holdings) {
     const current = sectorMap.get(h.sector) ?? 0;
     sectorMap.set(h.sector, current + h.evalAmount);
+  }
+
+  for (const m of miscAssets) {
+    const sector = m.sector || '기타';
+    const current = sectorMap.get(sector) ?? 0;
+    sectorMap.set(sector, current + m.amount);
   }
 
   const totalEval = Array.from(sectorMap.values()).reduce((a, b) => a + b, 0);

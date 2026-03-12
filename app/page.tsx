@@ -247,7 +247,7 @@ export default function Home() {
 
   const consolidated = useMemo(() => consolidateHoldings(holdingsWithMeta), [holdingsWithMeta]);
   const accountSummaries = useMemo(() => calcAccountSummaries(holdingsWithMeta), [holdingsWithMeta]);
-  const sectorAllocations = useMemo(() => calcSectorAllocations(holdingsWithMeta, sectorDefs), [holdingsWithMeta, sectorDefs]);
+  const sectorAllocations = useMemo(() => calcSectorAllocations(holdingsWithMeta, sectorDefs, miscAssets), [holdingsWithMeta, sectorDefs, miscAssets]);
   const portfolioSummary = useMemo(
     () => calcPortfolioSummary(holdingsWithMeta, exchangeRate),
     [holdingsWithMeta, exchangeRate]
@@ -420,7 +420,7 @@ export default function Home() {
           </div>
 
           {/* 4. 기타 자산 */}
-          <MiscAssets assets={miscAssets} onChange={handleMiscAssetsChange} />
+          <MiscAssets assets={miscAssets} sectors={sectorDefs} onChange={handleMiscAssetsChange} />
 
           {/* 5. 섹터 관리 */}
           <SectorManager

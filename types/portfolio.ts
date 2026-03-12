@@ -114,6 +114,7 @@ export interface ProjectionParams {
 export interface MiscAsset {
   name: string;
   amount: number; // KRW
+  sector?: string; // 섹터 (미지정 시 '기타')
 }
 
 export interface ProjectionYear {
