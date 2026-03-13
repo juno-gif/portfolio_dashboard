@@ -34,12 +34,15 @@ function extractHoldings(tbl){
   if(!tbl)return[];
   var hrow=tbl.querySelector('thead tr,tr:first-child');
   var hdrs=hrow?Array.from(hrow.querySelectorAll('th,td')).map(function(c){return c.textContent.trim();}):[];
-  var c종목명=findCol(hdrs,['종목명','종목']);if(c종목명<0)c종목명=1;
-  var c통화=findCol(hdrs,['통화','화폐']);if(c통화<0)c통화=3;
-  var c수량=findCol(hdrs,['보유수량','수량','잔고수량']);if(c수량<0)c수량=5;
+  var c종목명=findCol(hdrs,['종목명','상품명','종목']);if(c종목명<0)c종목명=1;
+  var c통화=findCol(hdrs,['통화','화폐']);
+  var c수량=findCol(hdrs,['보유수량','수량','잔고수량']);
   var c매입=findCol(hdrs,['매입금액','매입']);if(c매입<0)c매입=6;
   var c평균=findCol(hdrs,['평균단가','평단가','평균매입']);
+  var c평가금액=findCol(hdrs,['평가금액']);
+  var c평가손익=findCol(hdrs,['평가손익','손익']);
   var c계좌=findCol(hdrs,['계좌번호','계좌']);if(c계좌<0)c계좌=0;
+  var irpMode=c수량<0;
   function num(s){return parseFloat((s||'').replace(/[,\\s원%]/g,''))||0;}
   var out=[];
   Array.from(tbl.querySelectorAll('tbody tr')).forEach(function(row){
@@ -47,12 +50,21 @@ function extractHoldings(tbl){
     var get=function(i){return i>=0&&cells[i]?cells[i].textContent.trim():'';};
     var 종목명=get(c종목명);if(!종목명||종목명==='-')return;
     var 종목번호=extractCode(cells[c종목명]);
-    var 통화=(get(c통화)||'KRW').toUpperCase();
+    var 통화=c통화>=0?(get(c통화)||'KRW').toUpperCase():'KRW';
     var 단위=통화==='USD'?'USD':'KRW';
-    var 수량=num(get(c수량));if(수량<=0)return;
-    var 평균단가=c평균>=0?num(get(c평균)):0;
-    if(!평균단가){var 매입=num(get(c매입));if(매입>0)평균단가=Math.round(매입/수량);}
-    if(!평균단가)return;
+    var 수량,평균단가;
+    if(irpMode){
+      var 평가액=num(get(c평가금액));
+      var 손익=c평가손익>=0?num(get(c평가손익)):0;
+      var 매입금액=평가액-손익;
+      if(평가액<=0)return;
+      수량=1;평균단가=Math.round(매입금액>0?매입금액:평가액);
+    }else{
+      수량=num(get(c수량));if(수량<=0)return;
+      평균단가=c평균>=0?num(get(c평균)):0;
+      if(!평균단가){var 매입=num(get(c매입));if(매입>0)평균단가=Math.round(매입/수량);}
+      if(!평균단가)return;
+    }
     var 계좌=get(c계좌)||'미래에셋';
     out.push({계좌:계좌,종목명:종목명,종목번호:종목번호,수량:수량,평균단가:평균단가,단위:단위,_tab:tabLabel});
   });
