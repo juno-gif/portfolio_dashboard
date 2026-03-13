@@ -82,7 +82,7 @@ function render(){
   });
   body.appendChild(tbadge);
   if(!table||extracted.length===0){
-    body.appendChild(mk('p','color:#9ca3af;font-size:12px;margin:0 0 12px;','이 탭에서 보유 종목을 찾지 못했습니다.\n상품별 자산 → 각 탭에서 실행해주세요.'));
+    body.appendChild(mk('p','color:#9ca3af;font-size:12px;margin:0 0 12px;','이 탭에서 보유 종목을 찾지 못했습니다. 상품별 자산 → 각 탭에서 실행해주세요.'));
   } else {
     var missingCode=extracted.filter(function(h){return!h.종목번호;}).length;
     body.appendChild(mk('p','font-size:12px;color:#6b7280;margin:0 0 8px;','추출: '+extracted.length+'개'+(missingCode?' · ⚠ 코드 미확인: '+missingCode+'개':'')));
