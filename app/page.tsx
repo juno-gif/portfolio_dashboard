@@ -506,13 +506,6 @@ export default function Home() {
             )}
           </div>
           <div className="flex justify-end gap-4 items-center">
-            <a
-              href={portfolioToken ? `/bookmarklet?token=${portfolioToken}` : '/bookmarklet'}
-              target="_blank"
-              className="text-xs text-muted-foreground hover:text-foreground underline"
-            >
-              미래에셋 북마크릿
-            </a>
             <button
               onClick={handleDownloadCsv}
               className="text-xs text-muted-foreground hover:text-foreground underline"
