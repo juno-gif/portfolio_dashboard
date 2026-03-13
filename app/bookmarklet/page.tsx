@@ -16,11 +16,7 @@ var atel=document.querySelector('.tab_area .on,.tab_area .active,.tabUl .on,.tab
 if(atel)tabLabel=atel.textContent.trim().replace(/\\s+/g,' ').slice(0,10);
 function findTable(){
   var all=Array.from(document.querySelectorAll('table'));
-  return all.sort(function(a,b){
-    var dr=b.querySelectorAll('tbody tr').length-a.querySelectorAll('tbody tr').length;
-    if(dr!==0)return dr;
-    return b.querySelectorAll('td,th').length-a.querySelectorAll('td,th').length;
-  })[0]||null;
+  return all.sort(function(a,b){return b.querySelectorAll('tbody tr').length-a.querySelectorAll('tbody tr').length})[0]||null;
 }
 function findCol(hdrs,kws){
   for(var i=0;i<hdrs.length;i++)for(var j=0;j<kws.length;j++)if(hdrs[i].includes(kws[j]))return i;
@@ -40,7 +36,7 @@ function extractHoldings(tbl){
   var hdrs=hrow?Array.from(hrow.querySelectorAll('th,td')).map(function(c){return c.textContent.trim();}):[];
   var c종목명=findCol(hdrs,['종목명','상품명','종목']);if(c종목명<0)c종목명=1;
   var c통화=findCol(hdrs,['통화','화폐']);
-  var c수량=findCol(hdrs,['보유수량','수량','잔고수량','잔고']);
+  var c수량=findCol(hdrs,['보유수량','수량','잔고수량']);
   var c매입=findCol(hdrs,['매입금액','매입']);if(c매입<0)c매입=6;
   var c평균=findCol(hdrs,['평균단가','평단가','평균매입']);
   var c평가금액=findCol(hdrs,['평가금액']);

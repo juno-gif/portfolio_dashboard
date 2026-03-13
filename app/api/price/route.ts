@@ -10,13 +10,12 @@ interface NaverStockData {
   [key: string]: unknown;
 }
 
-async function fetchNaverPriceByType(
-  code: string,
-  type: 'stock' | 'etf' | 'etn'
+async function fetchNaverPrice(
+  code: string
 ): Promise<{ currentPrice: number; prevClose: number } | null> {
   try {
     const res = await fetch(
-      `https://polling.finance.naver.com/api/realtime/domestic/${type}/${code}`,
+      `https://polling.finance.naver.com/api/realtime/domestic/stock/${code}`,
       {
         headers: { 'User-Agent': 'Mozilla/5.0' },
         signal: AbortSignal.timeout(5000),
@@ -31,7 +30,7 @@ async function fetchNaverPriceByType(
     const currentPrice = stockData.closePriceRaw != null ? Number(stockData.closePriceRaw) : null;
     const diff = stockData.compareToPreviousClosePriceRaw != null ? Number(stockData.compareToPreviousClosePriceRaw) : 0;
 
-    if (currentPrice == null || isNaN(currentPrice) || currentPrice === 0) return null;
+    if (currentPrice == null || isNaN(currentPrice)) return null;
 
     return {
       currentPrice,
@@ -40,22 +39,6 @@ async function fetchNaverPriceByType(
   } catch {
     return null;
   }
-}
-
-async function fetchNaverPrice(
-  code: string
-): Promise<{ currentPrice: number; prevClose: number } | null> {
-  // 알파뉴메릭 코드(ETN: e.g. 0026S0)는 etn 경로 우선 시도
-  const isEtn = /[a-zA-Z]/.test(code);
-  if (isEtn) {
-    const etnResult = await fetchNaverPriceByType(code, 'etn');
-    if (etnResult) return etnResult;
-    return fetchNaverPriceByType(code, 'etf');
-  }
-  const stockResult = await fetchNaverPriceByType(code, 'stock');
-  if (stockResult) return stockResult;
-  // ETF fallback
-  return fetchNaverPriceByType(code, 'etf');
 }
 
 export async function GET(request: NextRequest) {
