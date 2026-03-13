@@ -36,7 +36,7 @@ function extractHoldings(tbl){
   var hdrs=hrow?Array.from(hrow.querySelectorAll('th,td')).map(function(c){return c.textContent.trim();}):[];
   var c종목명=findCol(hdrs,['종목명','상품명','종목']);if(c종목명<0)c종목명=1;
   var c통화=findCol(hdrs,['통화','화폐']);
-  var c수량=findCol(hdrs,['보유수량','수량','잔고수량']);
+  var c수량=findCol(hdrs,['보유수량','수량','잔고수량','잔고']);
   var c매입=findCol(hdrs,['매입금액','매입']);if(c매입<0)c매입=6;
   var c평균=findCol(hdrs,['평균단가','평단가','평균매입']);
   var c평가금액=findCol(hdrs,['평가금액']);
