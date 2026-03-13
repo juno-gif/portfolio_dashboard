@@ -16,7 +16,11 @@ var atel=document.querySelector('.tab_area .on,.tab_area .active,.tabUl .on,.tab
 if(atel)tabLabel=atel.textContent.trim().replace(/\\s+/g,' ').slice(0,10);
 function findTable(){
   var all=Array.from(document.querySelectorAll('table'));
-  return all.sort(function(a,b){return b.querySelectorAll('tbody tr').length-a.querySelectorAll('tbody tr').length})[0]||null;
+  return all.sort(function(a,b){
+    var dr=b.querySelectorAll('tbody tr').length-a.querySelectorAll('tbody tr').length;
+    if(dr!==0)return dr;
+    return b.querySelectorAll('td,th').length-a.querySelectorAll('td,th').length;
+  })[0]||null;
 }
 function findCol(hdrs,kws){
   for(var i=0;i<hdrs.length;i++)for(var j=0;j<kws.length;j++)if(hdrs[i].includes(kws[j]))return i;

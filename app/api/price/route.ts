@@ -10,12 +10,13 @@ interface NaverStockData {
   [key: string]: unknown;
 }
 
-async function fetchNaverPrice(
-  code: string
+async function fetchNaverPriceByType(
+  code: string,
+  type: 'stock' | 'etf'
 ): Promise<{ currentPrice: number; prevClose: number } | null> {
   try {
     const res = await fetch(
-      `https://polling.finance.naver.com/api/realtime/domestic/stock/${code}`,
+      `https://polling.finance.naver.com/api/realtime/domestic/${type}/${code}`,
       {
         headers: { 'User-Agent': 'Mozilla/5.0' },
         signal: AbortSignal.timeout(5000),
@@ -30,7 +31,7 @@ async function fetchNaverPrice(
     const currentPrice = stockData.closePriceRaw != null ? Number(stockData.closePriceRaw) : null;
     const diff = stockData.compareToPreviousClosePriceRaw != null ? Number(stockData.compareToPreviousClosePriceRaw) : 0;
 
-    if (currentPrice == null || isNaN(currentPrice)) return null;
+    if (currentPrice == null || isNaN(currentPrice) || currentPrice === 0) return null;
 
     return {
       currentPrice,
@@ -39,6 +40,15 @@ async function fetchNaverPrice(
   } catch {
     return null;
   }
+}
+
+async function fetchNaverPrice(
+  code: string
+): Promise<{ currentPrice: number; prevClose: number } | null> {
+  const stockResult = await fetchNaverPriceByType(code, 'stock');
+  if (stockResult) return stockResult;
+  // ETF fallback (e.g. 1Q 미국S&P500, TIGER 등)
+  return fetchNaverPriceByType(code, 'etf');
 }
 
 export async function GET(request: NextRequest) {
