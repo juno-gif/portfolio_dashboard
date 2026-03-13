@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 // Bookmarklet JS template — %%ORIGIN%% and %%TOKEN%% are replaced at runtime
 const BM_TEMPLATE = `(function(){
 'use strict';
+try{
 var O='%%ORIGIN%%',T='%%TOKEN%%',SK='pfbm1';
 var PID='__pfbm__';
 var ex=document.getElementById(PID);if(ex){ex.remove();return;}
@@ -172,6 +173,7 @@ function doUpload(b){
     buildAndSend();
   }
 }
+}catch(err){alert('[포트폴리오 동기화 오류]\\n'+err.message+'\\n\\n브라우저 콘솔(F12)에서 상세 오류를 확인해주세요.');}
 })();`;
 
 export default function BookmarkletPage() {
