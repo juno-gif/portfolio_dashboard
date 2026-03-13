@@ -8,7 +8,7 @@ const ETF_BRAND_PREFIXES = ['1Q', 'TIGER', 'KODEX', 'ACE', 'ARIRANG', 'HANARO', 
 async function queryNaver(q: string): Promise<{ code: string; name: string } | null> {
   try {
     const res = await fetch(
-      `https://ac.stock.naver.com/ac?q=${encodeURIComponent(q)}&target=stock,etf,index`,
+      `https://ac.stock.naver.com/ac?q=${encodeURIComponent(q)}&target=stock,etf,etn,index`,
       { headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://finance.naver.com/' }, signal: AbortSignal.timeout(4000) }
     );
     if (!res.ok) return null;

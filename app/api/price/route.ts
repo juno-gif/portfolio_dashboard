@@ -12,7 +12,7 @@ interface NaverStockData {
 
 async function fetchNaverPriceByType(
   code: string,
-  type: 'stock' | 'etf'
+  type: 'stock' | 'etf' | 'etn'
 ): Promise<{ currentPrice: number; prevClose: number } | null> {
   try {
     const res = await fetch(
@@ -45,9 +45,16 @@ async function fetchNaverPriceByType(
 async function fetchNaverPrice(
   code: string
 ): Promise<{ currentPrice: number; prevClose: number } | null> {
+  // 알파뉴메릭 코드(ETN: e.g. 0026S0)는 etn 경로 우선 시도
+  const isEtn = /[a-zA-Z]/.test(code);
+  if (isEtn) {
+    const etnResult = await fetchNaverPriceByType(code, 'etn');
+    if (etnResult) return etnResult;
+    return fetchNaverPriceByType(code, 'etf');
+  }
   const stockResult = await fetchNaverPriceByType(code, 'stock');
   if (stockResult) return stockResult;
-  // ETF fallback (e.g. 1Q 미국S&P500, TIGER 등)
+  // ETF fallback
   return fetchNaverPriceByType(code, 'etf');
 }
 
