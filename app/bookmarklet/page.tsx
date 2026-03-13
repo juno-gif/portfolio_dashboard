@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // Bookmarklet JS template — %%ORIGIN%% and %%TOKEN%% are replaced at runtime
 const BM_TEMPLATE = `(function(){
@@ -178,6 +178,7 @@ export default function BookmarkletPage() {
   const [origin, setOrigin] = useState('');
   const [token, setToken] = useState('');
   const [dragging, setDragging] = useState(false);
+  const linkRef = useRef<HTMLAnchorElement>(null);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -185,11 +186,14 @@ export default function BookmarkletPage() {
     setToken(p.get('token') || '');
   }, []);
 
-  const code = BM_TEMPLATE
-    .replace(/%%ORIGIN%%/g, origin)
-    .replace(/%%TOKEN%%/g, token);
-
-  const href = `javascript:${encodeURIComponent(code)}`;
+  // React blocks javascript: URLs in href — set via DOM ref to bypass
+  useEffect(() => {
+    if (!linkRef.current || !origin) return;
+    const code = BM_TEMPLATE
+      .replace(/%%ORIGIN%%/g, origin)
+      .replace(/%%TOKEN%%/g, token);
+    linkRef.current.setAttribute('href', `javascript:${encodeURIComponent(code)}`);
+  }, [origin, token]);
 
   return (
     <div className="min-h-screen bg-background p-6 max-w-2xl mx-auto">
@@ -216,7 +220,7 @@ export default function BookmarkletPage() {
           </p>
           {origin ? (
             <a
-              href={href}
+              ref={linkRef}
               draggable
               onDragStart={() => setDragging(true)}
               onDragEnd={() => setDragging(false)}
