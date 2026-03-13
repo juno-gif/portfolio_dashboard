@@ -3,6 +3,16 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const redis = Redis.fromEnv();
 
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS });
+}
+
 // GET /api/portfolio?token=xxx → CSV 텍스트 반환
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token');
@@ -34,5 +44,5 @@ export async function POST(request: NextRequest) {
   // TTL 1년
   await redis.set(`portfolio:${token}`, csv, { ex: 60 * 60 * 24 * 365 });
 
-  return NextResponse.json({ token });
+  return NextResponse.json({ token }, { headers: CORS });
 }
