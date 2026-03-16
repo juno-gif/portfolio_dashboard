@@ -24,7 +24,14 @@ async function fetchYahooPrice(
     const validCloses = closes.filter((v) => v != null && !isNaN(v));
 
     const currentPrice = result.meta?.regularMarketPrice ?? validCloses.at(-1) ?? null;
-    const prevClose = validCloses.length >= 2 ? validCloses.at(-2)! : currentPrice;
+    // meta.previousClose = 직전 거래일 공식 종가 (가장 신뢰도 높음)
+    // 없을 경우 종가 배열로 추론: 마감 후엔 at(-2), 개장 중엔 at(-1)이 전날 종가
+    const metaPrevClose = result.meta?.previousClose as number | undefined;
+    const lastClose = validCloses.at(-1);
+    const isMarketClosed =
+      lastClose != null && currentPrice != null && Math.abs(currentPrice - lastClose) / lastClose < 0.005;
+    const arrayPrevClose = isMarketClosed ? validCloses.at(-2) : lastClose;
+    const prevClose = metaPrevClose ?? arrayPrevClose ?? currentPrice;
 
     if (currentPrice == null) return null;
 
