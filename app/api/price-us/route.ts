@@ -5,7 +5,7 @@ async function fetchYahooPrice(
 ): Promise<{ currentPrice: number; prevClose: number } | null> {
   try {
     const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=2d`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d`,
       {
         headers: { 'User-Agent': 'Mozilla/5.0' },
         signal: AbortSignal.timeout(5000),
@@ -15,12 +15,16 @@ async function fetchYahooPrice(
     if (!res.ok) return null;
 
     const data = await res.json();
-    const meta = data?.chart?.result?.[0]?.meta;
+    const result = data?.chart?.result?.[0];
+    if (!result) return null;
 
-    if (!meta) return null;
+    // 실제 종가 배열에서 마지막 두 거래일 값을 직접 사용
+    // (meta.previousClose/chartPreviousClose는 주말 낀 경우 오일치 발생)
+    const closes: number[] = result.indicators?.quote?.[0]?.close ?? [];
+    const validCloses = closes.filter((v) => v != null && !isNaN(v));
 
-    const currentPrice = meta.regularMarketPrice ?? meta.chartPreviousClose ?? null;
-    const prevClose = meta.previousClose ?? meta.chartPreviousClose ?? currentPrice;
+    const currentPrice = result.meta?.regularMarketPrice ?? validCloses.at(-1) ?? null;
+    const prevClose = validCloses.length >= 2 ? validCloses.at(-2)! : currentPrice;
 
     if (currentPrice == null) return null;
 
