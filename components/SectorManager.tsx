@@ -31,6 +31,7 @@ export default function SectorManager({
   const [error, setError] = useState('');
   const [editingName, setEditingName] = useState<string | null>(null); // 편집 중인 섹터의 현재 이름
   const [editingValue, setEditingValue] = useState('');
+  const [editingColor, setEditingColor] = useState<string | null>(null); // 컬러 피커 열린 섹터
 
   const inputCls =
     'border border-input rounded-md px-2 py-1.5 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-ring';
@@ -101,6 +102,12 @@ export default function SectorManager({
     onChange(nextSectors, nextOverrides);
   }
 
+  function updateColor(name: string, color: string) {
+    const nextSectors = sectors.map((s) => (s.name === name ? { ...s, color } : s));
+    onChange(nextSectors, overrides);
+    setEditingColor(null);
+  }
+
   function resetSectors() {
     // 기본 섹터 복원, 오버라이드는 유지
     onChange(DEFAULT_SECTORS, overrides);
@@ -161,55 +168,70 @@ export default function SectorManager({
                 const canDelete = !used.has(s.name);
                 const isEditing = editingName === s.name;
                 return (
-                  <div
-                    key={s.name}
-                    className="flex items-center justify-between text-xs bg-muted rounded-md px-3 py-2 gap-2"
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span
-                        className="w-3 h-3 rounded-sm flex-shrink-0"
-                        style={{ backgroundColor: s.color }}
-                      />
-                      {isEditing ? (
-                        <input
-                          autoFocus
-                          type="text"
-                          value={editingValue}
-                          onChange={(e) => setEditingValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') confirmEdit(s.name);
-                            if (e.key === 'Escape') setEditingName(null);
-                          }}
-                          onBlur={() => confirmEdit(s.name)}
-                          className="border border-input rounded px-1.5 py-0.5 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-ring w-full"
-                        />
-                      ) : (
-                        <span className="font-medium truncate">{s.name}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {!isEditing && (
+                  <div key={s.name} className="text-xs bg-muted rounded-md overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 gap-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
                         <button
-                          onClick={() => startEdit(s.name)}
-                          title="이름 편집"
-                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => setEditingColor(editingColor === s.name ? null : s.name)}
+                          title="색상 변경"
+                          className="w-3 h-3 rounded-sm flex-shrink-0 ring-offset-1 hover:ring-2 hover:ring-ring transition-all"
+                          style={{ backgroundColor: s.color }}
+                        />
+                        {isEditing ? (
+                          <input
+                            autoFocus
+                            type="text"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') confirmEdit(s.name);
+                              if (e.key === 'Escape') setEditingName(null);
+                            }}
+                            onBlur={() => confirmEdit(s.name)}
+                            className="border border-input rounded px-1.5 py-0.5 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-ring w-full"
+                          />
+                        ) : (
+                          <span className="font-medium truncate">{s.name}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {!isEditing && (
+                          <button
+                            onClick={() => startEdit(s.name)}
+                            title="이름 편집"
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            ✎
+                          </button>
+                        )}
+                        <button
+                          onClick={() => deleteSector(s.name)}
+                          disabled={!canDelete}
+                          title={canDelete ? '삭제' : '이 섹터를 사용 중인 종목이 있어 삭제할 수 없습니다'}
+                          className={`transition-colors ${
+                            canDelete
+                              ? 'text-muted-foreground hover:text-destructive'
+                              : 'text-muted-foreground/30 cursor-not-allowed'
+                          }`}
                         >
-                          ✎
+                          ✕
                         </button>
-                      )}
-                      <button
-                        onClick={() => deleteSector(s.name)}
-                        disabled={!canDelete}
-                        title={canDelete ? '삭제' : '이 섹터를 사용 중인 종목이 있어 삭제할 수 없습니다'}
-                        className={`transition-colors ${
-                          canDelete
-                            ? 'text-muted-foreground hover:text-destructive'
-                            : 'text-muted-foreground/30 cursor-not-allowed'
-                        }`}
-                      >
-                        ✕
-                      </button>
+                      </div>
                     </div>
+                    {editingColor === s.name && (
+                      <div className="flex gap-1 flex-wrap px-3 pb-2 border-t border-border/40 pt-2">
+                        {PRESET_COLORS.map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => updateColor(s.name, c)}
+                            className={`w-5 h-5 rounded-sm border-2 transition-transform ${
+                              s.color === c ? 'border-foreground scale-110' : 'border-transparent hover:scale-110'
+                            }`}
+                            style={{ backgroundColor: c }}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
