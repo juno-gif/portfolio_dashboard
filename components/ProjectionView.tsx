@@ -122,6 +122,17 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
   const [newMonthly, setNewMonthly] = useState<string>('');
   const [formError, setFormError] = useState<string>('');
 
+  // 이벤트 인라인 편집 상태
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editType, setEditType] = useState<'one-time' | 'recurring'>('one-time');
+  const [editYear, setEditYear] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editLabel, setEditLabel] = useState('');
+  const [editStartAge, setEditStartAge] = useState('');
+  const [editEndAge, setEditEndAge] = useState('');
+  const [editMonthly, setEditMonthly] = useState('');
+  const [editError, setEditError] = useState('');
+
   const selectId = useId();
 
   const params: ProjectionParams | null = useMemo(() => {
@@ -172,6 +183,54 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
 
   function removeEvent(index: number) {
     setEvents((prev) => prev.filter((_, i) => i !== index));
+    if (editingIndex === index) setEditingIndex(null);
+  }
+
+  function startEditEvent(index: number) {
+    const ev = events[index];
+    setEditError('');
+    setEditType(ev.type);
+    if (ev.type === 'one-time') {
+      setEditYear(String(ev.year));
+      setEditAmount(String(ev.amount));
+      setEditLabel(ev.label);
+    } else {
+      setEditStartAge(String(ev.startAge));
+      setEditEndAge(ev.endAge != null ? String(ev.endAge) : '');
+      setEditMonthly(String(ev.monthlyAmount));
+      setEditLabel(ev.label);
+    }
+    setEditingIndex(index);
+  }
+
+  function saveEditEvent(index: number) {
+    setEditError('');
+    if (editType === 'one-time') {
+      const year = parseInt(editYear);
+      const amount = parseFloat(editAmount);
+      if (isNaN(year) || year < 2000) { setEditError('연도를 올바르게 입력해주세요'); return; }
+      if (isNaN(amount)) { setEditError('금액을 입력해주세요'); return; }
+      if (!editLabel.trim()) { setEditError('설명을 입력해주세요'); return; }
+      setEvents((prev) => prev.map((ev, i) =>
+        i === index ? { type: 'one-time', year, amount, label: editLabel.trim() } : ev
+      ));
+    } else {
+      const startAge = parseInt(editStartAge);
+      const monthly = parseFloat(editMonthly);
+      if (isNaN(startAge) || startAge <= 0) { setEditError('시작 나이를 입력해주세요'); return; }
+      if (isNaN(monthly)) { setEditError('월 금액을 입력해주세요'); return; }
+      if (!editLabel.trim()) { setEditError('설명을 입력해주세요'); return; }
+      setEvents((prev) => prev.map((ev, i) =>
+        i === index ? {
+          type: 'recurring',
+          startAge,
+          endAge: editEndAge ? parseInt(editEndAge) : undefined,
+          monthlyAmount: monthly,
+          label: editLabel.trim(),
+        } : ev
+      ));
+    }
+    setEditingIndex(null);
   }
 
   const inputCls =
@@ -244,44 +303,86 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
           {/* 기존 이벤트 목록 */}
           {events.length > 0 && (
             <div className="space-y-1.5">
-              {events.map((ev, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between text-xs bg-muted rounded-md px-3 py-2"
-                >
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium">
-                      {ev.type === 'one-time' ? '일회성' : '반복'}
-                    </span>
-                    {ev.type === 'one-time' ? (
-                      <span>{ev.year}년</span>
+              {events.map((ev, i) =>
+                editingIndex === i ? (
+                  // 인라인 편집 폼
+                  <div key={i} className="border border-primary/40 rounded-md p-3 space-y-2 bg-muted/50 text-xs">
+                    <div className="flex gap-2 items-center">
+                      <span className="text-muted-foreground shrink-0">유형</span>
+                      <select
+                        className="border border-input rounded-md px-2 py-1 text-xs bg-background"
+                        value={editType}
+                        onChange={(e) => setEditType(e.target.value as 'one-time' | 'recurring')}
+                      >
+                        <option value="one-time">일회성</option>
+                        <option value="recurring">반복</option>
+                      </select>
+                    </div>
+                    {editType === 'one-time' ? (
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-muted-foreground mb-1 block">연도</label>
+                          <input type="number" className={inputCls} value={editYear} onChange={(e) => setEditYear(e.target.value)} placeholder="2041" />
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground mb-1 block">금액 (만원)</label>
+                          <input type="number" className={inputCls} value={editAmount} onChange={(e) => setEditAmount(e.target.value)} placeholder="+40000" />
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground mb-1 block">설명</label>
+                          <input type="text" className={inputCls} value={editLabel} onChange={(e) => setEditLabel(e.target.value)} placeholder="퇴직금" />
+                        </div>
+                      </div>
                     ) : (
-                      <span>
-                        {ev.startAge}세{ev.endAge ? `~${ev.endAge}세` : '~'}
-                      </span>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div>
+                          <label className="text-muted-foreground mb-1 block">시작 나이</label>
+                          <input type="number" className={inputCls} value={editStartAge} onChange={(e) => setEditStartAge(e.target.value)} placeholder="65" />
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground mb-1 block">종료 나이</label>
+                          <input type="number" className={inputCls} value={editEndAge} onChange={(e) => setEditEndAge(e.target.value)} placeholder="없으면 끝까지" />
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground mb-1 block">월 금액 (만원)</label>
+                          <input type="number" className={inputCls} value={editMonthly} onChange={(e) => setEditMonthly(e.target.value)} placeholder="+150 / -300" />
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground mb-1 block">설명</label>
+                          <input type="text" className={inputCls} value={editLabel} onChange={(e) => setEditLabel(e.target.value)} placeholder="국민연금" />
+                        </div>
+                      </div>
                     )}
-                    <span className="font-medium">{ev.label}</span>
-                    <span
-                      className={
-                        (ev.type === 'one-time' ? ev.amount : ev.monthlyAmount) >= 0
-                          ? 'text-green-500'
-                          : 'text-red-500'
-                      }
-                    >
-                      {ev.type === 'one-time'
-                        ? `${fmtSigned(ev.amount)}만원`
-                        : `월 ${fmtSigned(ev.monthlyAmount)}만원`}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => saveEditEvent(i)} className="text-xs px-3 py-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">저장</button>
+                      <button onClick={() => setEditingIndex(null)} className="text-xs px-3 py-1 rounded-md border hover:bg-muted transition-colors">취소</button>
+                      {editError && <span className="text-red-500 text-xs">{editError}</span>}
+                    </div>
                   </div>
-                  <button
-                    onClick={() => removeEvent(i)}
-                    className="text-muted-foreground hover:text-foreground ml-2 shrink-0"
-                    aria-label="삭제"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
+                ) : (
+                  // 요약 표시 행
+                  <div key={i} className="flex items-center justify-between text-xs bg-muted rounded-md px-3 py-2">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium">
+                        {ev.type === 'one-time' ? '일회성' : '반복'}
+                      </span>
+                      {ev.type === 'one-time' ? (
+                        <span>{ev.year}년</span>
+                      ) : (
+                        <span>{ev.startAge}세{ev.endAge ? `~${ev.endAge}세` : '~'}</span>
+                      )}
+                      <span className="font-medium">{ev.label}</span>
+                      <span className={(ev.type === 'one-time' ? ev.amount : ev.monthlyAmount) >= 0 ? 'text-green-500' : 'text-red-500'}>
+                        {ev.type === 'one-time' ? `${fmtSigned(ev.amount)}만원` : `월 ${fmtSigned(ev.monthlyAmount)}만원`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 ml-2 shrink-0">
+                      <button onClick={() => startEditEvent(i)} className="text-muted-foreground hover:text-foreground transition-colors" aria-label="편집">✎</button>
+                      <button onClick={() => removeEvent(i)} className="text-muted-foreground hover:text-destructive transition-colors" aria-label="삭제">✕</button>
+                    </div>
+                  </div>
+                )
+              )}
             </div>
           )}
 
