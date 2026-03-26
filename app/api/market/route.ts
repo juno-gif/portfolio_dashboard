@@ -6,6 +6,7 @@ export interface MarketItem {
   unit: string;
   currentPrice: number;
   prevClose: number;
+  periodStartPrice: number;
   dates: string[];
   prices: number[];
 }
@@ -54,7 +55,7 @@ const SYMBOL_GROUPS: { group: string; items: { symbol: string; name: string; uni
   },
 ];
 
-async function fetchChart(symbol: string): Promise<{ dates: string[]; prices: number[]; currentPrice: number; prevClose: number } | null> {
+async function fetchChart(symbol: string): Promise<{ dates: string[]; prices: number[]; currentPrice: number; prevClose: number; periodStartPrice: number } | null> {
   try {
     const res = await fetch(
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=3mo`,
@@ -84,9 +85,11 @@ async function fetchChart(symbol: string): Promise<{ dates: string[]; prices: nu
     }
 
     const currentPrice = meta.regularMarketPrice ?? prices[prices.length - 1] ?? 0;
-    const prevClose = meta.previousClose ?? meta.chartPreviousClose ?? currentPrice;
+    // chartPreviousClose는 3개월 전 가격이므로 제외, 전일 종가는 차트 마지막 데이터로 추정
+    const prevClose = meta.previousClose ?? meta.regularMarketPreviousClose ?? prices[prices.length - 2] ?? currentPrice;
+    const periodStartPrice = prices[0] ?? currentPrice;
 
-    return { dates, prices, currentPrice, prevClose };
+    return { dates, prices, currentPrice, prevClose, periodStartPrice };
   } catch {
     return null;
   }
@@ -105,8 +108,8 @@ export async function GET() {
     items: g.items.map((s) => {
       const r = results[idx++];
       if (r.status !== 'fulfilled' || !r.value) return null;
-      const { dates, prices, currentPrice, prevClose } = r.value;
-      return { symbol: s.symbol, name: s.name, unit: s.unit, currentPrice, prevClose, dates, prices };
+      const { dates, prices, currentPrice, prevClose, periodStartPrice } = r.value;
+      return { symbol: s.symbol, name: s.name, unit: s.unit, currentPrice, prevClose, periodStartPrice, dates, prices };
     }),
   }));
 

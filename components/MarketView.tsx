@@ -30,6 +30,10 @@ function MarketCard({ item }: { item: MarketItem }) {
   const changeRate = item.prevClose > 0 ? (change / item.prevClose) * 100 : 0;
   const isUp = change >= 0;
 
+  const periodChange = item.currentPrice - item.periodStartPrice;
+  const periodRate = item.periodStartPrice > 0 ? (periodChange / item.periodStartPrice) * 100 : 0;
+  const isPeriodUp = periodChange >= 0;
+
   const chartData = item.dates.map((d, i) => ({ date: d, price: item.prices[i] }));
   const minPrice = Math.min(...item.prices);
   const maxPrice = Math.max(...item.prices);
@@ -59,6 +63,12 @@ function MarketCard({ item }: { item: MarketItem }) {
           <p className="text-xs" style={{ color: priceColor }}>
             {isUp ? '▲' : '▼'} {fmt(Math.abs(change), item.unit)}
             {' '}({isUp ? '+' : ''}{changeRate.toFixed(2)}%)
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            3M{' '}
+            <span style={{ color: isPeriodUp ? '#e11d48' : '#2563eb' }}>
+              {isPeriodUp ? '+' : ''}{periodRate.toFixed(2)}%
+            </span>
           </p>
         </div>
       </div>

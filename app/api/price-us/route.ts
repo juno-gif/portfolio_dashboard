@@ -1,44 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-async function fetchYahooPrice(
+// Stooq API: 인증 불필요, 서버사이드 친화적
+// US 종목: {TICKER}.US 형식
+async function fetchStooqPrice(
   ticker: string
 ): Promise<{ currentPrice: number; prevClose: number } | null> {
+  const symbol = `${ticker}.US`;
+
   try {
     const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d`,
+      `https://stooq.com/q/d/l/?s=${symbol}&i=d`,
       {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        signal: AbortSignal.timeout(5000),
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        },
+        signal: AbortSignal.timeout(8000),
       }
     );
 
     if (!res.ok) return null;
 
-    const data = await res.json();
-    const result = data?.chart?.result?.[0];
-    if (!result) return null;
+    const text = await res.text();
+    // CSV 형식: Date,Open,High,Low,Close,Volume (첫 줄 헤더)
+    const lines = text
+      .trim()
+      .split('\n')
+      .slice(1) // 헤더 제거
+      .filter((l) => l.trim() && !l.toLowerCase().startsWith('no data'));
 
-    // 실제 종가 배열에서 마지막 두 거래일 값을 직접 사용
-    // (meta.previousClose/chartPreviousClose는 주말 낀 경우 오일치 발생)
-    const closes: number[] = result.indicators?.quote?.[0]?.close ?? [];
-    const validCloses = closes.filter((v) => v != null && !isNaN(v));
+    if (lines.length < 2) return null;
 
-    const currentPrice = result.meta?.regularMarketPrice ?? validCloses.at(-1) ?? null;
-    // meta.previousClose = 직전 거래일 공식 종가 (가장 신뢰도 높음)
-    // 없을 경우 종가 배열로 추론: 마감 후엔 at(-2), 개장 중엔 at(-1)이 전날 종가
-    const metaPrevClose = result.meta?.previousClose as number | undefined;
-    const lastClose = validCloses.at(-1);
-    const isMarketClosed =
-      lastClose != null && currentPrice != null && Math.abs(currentPrice - lastClose) / lastClose < 0.005;
-    const arrayPrevClose = isMarketClosed ? validCloses.at(-2) : lastClose;
-    const prevClose = metaPrevClose ?? arrayPrevClose ?? currentPrice;
+    const parseClose = (line: string) => parseFloat(line.split(',')[4]);
 
-    if (currentPrice == null) return null;
+    const currentPrice = parseClose(lines[lines.length - 1]);
+    const prevClose = parseClose(lines[lines.length - 2]);
 
-    return {
-      currentPrice: Number(currentPrice),
-      prevClose: Number(prevClose),
-    };
+    if (isNaN(currentPrice) || isNaN(prevClose) || currentPrice <= 0) return null;
+
+    return { currentPrice, prevClose };
   } catch {
     return null;
   }
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
   }
 
   const tickers = tickersParam.split(',').filter(Boolean);
-  const results = await Promise.allSettled(tickers.map(fetchYahooPrice));
+  const results = await Promise.allSettled(tickers.map(fetchStooqPrice));
 
   const priceMap: Record<string, { currentPrice: number; prevClose: number } | null> = {};
   tickers.forEach((ticker, i) => {

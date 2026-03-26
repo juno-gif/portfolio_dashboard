@@ -15,6 +15,8 @@ export default function MiscAssets({ assets, sectors, onChange }: MiscAssetsProp
   const [newAmount, setNewAmount] = useState('');
   const [newSector, setNewSector] = useState('기타');
   const [error, setError] = useState('');
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editAmount, setEditAmount] = useState('');
 
   const inputCls =
     'border border-input rounded-md px-2 py-1.5 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-ring';
@@ -41,6 +43,24 @@ export default function MiscAssets({ assets, sectors, onChange }: MiscAssetsProp
 
   function updateSector(index: number, sector: string) {
     onChange(assets.map((a, i) => i === index ? { ...a, sector } : a));
+  }
+
+  function startEdit(index: number) {
+    setEditingIndex(index);
+    setEditAmount(String(assets[index].amount));
+  }
+
+  function confirmEdit(index: number) {
+    const amount = parseFloat(editAmount.replace(/,/g, ''));
+    if (isNaN(amount) || amount <= 0) return;
+    onChange(assets.map((a, i) => i === index ? { ...a, amount } : a));
+    setEditingIndex(null);
+    setEditAmount('');
+  }
+
+  function cancelEdit() {
+    setEditingIndex(null);
+    setEditAmount('');
   }
 
   const total = assets.reduce((sum, a) => sum + a.amount, 0);
@@ -72,16 +92,55 @@ export default function MiscAssets({ assets, sectors, onChange }: MiscAssetsProp
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
-              <span className="text-muted-foreground whitespace-nowrap">
-                ₩{asset.amount.toLocaleString('ko-KR')}
-              </span>
-              <button
-                onClick={() => removeAsset(i)}
-                className="text-muted-foreground hover:text-foreground"
-                aria-label="삭제"
-              >
-                ✕
-              </button>
+              {editingIndex === i ? (
+                <>
+                  <input
+                    type="number"
+                    className={`${inputCls} w-28 text-xs py-1`}
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') confirmEdit(i);
+                      if (e.key === 'Escape') cancelEdit();
+                    }}
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => confirmEdit(i)}
+                    className="text-green-500 hover:text-green-600 font-bold"
+                    aria-label="확인"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    onClick={cancelEdit}
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="취소"
+                  >
+                    ✕
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-muted-foreground whitespace-nowrap">
+                    ₩{asset.amount.toLocaleString('ko-KR')}
+                  </span>
+                  <button
+                    onClick={() => startEdit(i)}
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="수정"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    onClick={() => removeAsset(i)}
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="삭제"
+                  >
+                    ✕
+                  </button>
+                </>
+              )}
             </div>
           </div>
         ))}

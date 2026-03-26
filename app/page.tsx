@@ -43,6 +43,7 @@ export default function Home() {
   const [miscAssets, setMiscAssets] = useState<MiscAsset[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedSector, setSelectedSector] = useState<string | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [sectorDefs, setSectorDefs] = useState<SectorDef[]>(DEFAULT_SECTORS);
   const [sectorOverrides, setSectorOverrides] = useState<Record<string, string>>({});
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -249,9 +250,16 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const consolidated = useMemo(() => consolidateHoldings(holdingsWithMeta), [holdingsWithMeta]);
+  const filteredHoldings = useMemo(
+    () => selectedAccount ? holdingsWithMeta.filter((h) => h.계좌 === selectedAccount) : holdingsWithMeta,
+    [holdingsWithMeta, selectedAccount]
+  );
+  const consolidated = useMemo(() => consolidateHoldings(filteredHoldings), [filteredHoldings]);
   const accountSummaries = useMemo(() => calcAccountSummaries(holdingsWithMeta), [holdingsWithMeta]);
-  const sectorAllocations = useMemo(() => calcSectorAllocations(holdingsWithMeta, sectorDefs, miscAssets), [holdingsWithMeta, sectorDefs, miscAssets]);
+  const sectorAllocations = useMemo(
+    () => calcSectorAllocations(filteredHoldings, sectorDefs, selectedAccount ? [] : miscAssets),
+    [filteredHoldings, sectorDefs, miscAssets, selectedAccount]
+  );
   const portfolioSummary = useMemo(
     () => calcPortfolioSummary(holdingsWithMeta, exchangeRate),
     [holdingsWithMeta, exchangeRate]
@@ -444,12 +452,21 @@ export default function Home() {
           />
 
           {/* 2. 계좌별 카드 */}
-          <AccountCards accounts={accountSummaries} />
+          <AccountCards
+            accounts={accountSummaries}
+            selectedAccount={selectedAccount}
+            onAccountClick={(account) => setSelectedAccount((prev) => prev === account ? null : account)}
+          />
 
           {/* 3. 섹터 차트 + 종목 리스트 */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-6">
             <div className="bg-card border rounded-xl p-4 xl:col-span-2">
-              <h2 className="text-sm font-semibold mb-3">섹터 비중</h2>
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-sm font-semibold">섹터 비중</h2>
+                {selectedAccount && (
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">{selectedAccount}</span>
+                )}
+              </div>
               <SectorChart
                 allocations={sectorAllocations}
                 selectedSector={selectedSector}

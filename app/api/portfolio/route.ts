@@ -1,7 +1,7 @@
 import { Redis } from '@upstash/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
-const redis = Redis.fromEnv();
+const redis = new Redis({ url: process.env.PORTFOLIO_KV_REST_API_URL, token: process.env.PORTFOLIO_KV_REST_API_TOKEN });
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
