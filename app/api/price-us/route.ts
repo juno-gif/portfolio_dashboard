@@ -1,42 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Stooq API: 인증 불필요, 서버사이드 친화적
-// US 종목: {TICKER}.US 형식
-async function fetchStooqPrice(
+// market route와 동일한 Yahoo Finance v8 chart API 사용 (crumb 불필요)
+async function fetchYahooPrice(
   ticker: string
 ): Promise<{ currentPrice: number; prevClose: number } | null> {
-  const symbol = `${ticker}.US`;
-
   try {
     const res = await fetch(
-      `https://stooq.com/q/d/l/?s=${symbol}&i=d`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`,
       {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        },
+        headers: { 'User-Agent': 'Mozilla/5.0' },
         signal: AbortSignal.timeout(8000),
       }
     );
-
     if (!res.ok) return null;
 
-    const text = await res.text();
-    // CSV 형식: Date,Open,High,Low,Close,Volume (첫 줄 헤더)
-    const lines = text
-      .trim()
-      .split('\n')
-      .slice(1) // 헤더 제거
-      .filter((l) => l.trim() && !l.toLowerCase().startsWith('no data'));
+    const data = await res.json();
+    const result = data?.chart?.result?.[0];
+    if (!result) return null;
 
-    if (lines.length < 2) return null;
+    const meta = result.meta;
+    const closes: (number | null)[] = result.indicators?.quote?.[0]?.close ?? [];
+    const validCloses = closes.filter((c): c is number => c != null);
 
-    const parseClose = (line: string) => parseFloat(line.split(',')[4]);
+    if (validCloses.length < 2) return null;
 
-    const currentPrice = parseClose(lines[lines.length - 1]);
-    const prevClose = parseClose(lines[lines.length - 2]);
+    const currentPrice = meta.regularMarketPrice ?? validCloses[validCloses.length - 1];
+    const prevClose = validCloses[validCloses.length - 2];
 
-    if (isNaN(currentPrice) || isNaN(prevClose) || currentPrice <= 0) return null;
+    if (!currentPrice || !prevClose) return null;
 
     return { currentPrice, prevClose };
   } catch {
@@ -53,7 +44,7 @@ export async function GET(request: NextRequest) {
   }
 
   const tickers = tickersParam.split(',').filter(Boolean);
-  const results = await Promise.allSettled(tickers.map(fetchStooqPrice));
+  const results = await Promise.allSettled(tickers.map(fetchYahooPrice));
 
   const priceMap: Record<string, { currentPrice: number; prevClose: number } | null> = {};
   tickers.forEach((ticker, i) => {
