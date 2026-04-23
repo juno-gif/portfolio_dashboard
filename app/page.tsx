@@ -612,6 +612,7 @@ export default function Home() {
         holding={selectedHolding}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
+        exchangeRate={exchangeRate}
       />
     </div>
   );

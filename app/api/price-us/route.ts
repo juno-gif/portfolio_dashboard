@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// market route와 동일한 Yahoo Finance v8 chart API 사용 (crumb 불필요)
 async function fetchYahooPrice(
   ticker: string
-): Promise<{ currentPrice: number; prevClose: number } | null> {
+): Promise<{ currentPrice: number; prevClose: number; priceLabel?: string } | null> {
   try {
     const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d&includePrePost=true`,
       {
         headers: { 'User-Agent': 'Mozilla/5.0' },
         signal: AbortSignal.timeout(8000),
@@ -21,15 +20,31 @@ async function fetchYahooPrice(
     const meta = result.meta;
     const closes: (number | null)[] = result.indicators?.quote?.[0]?.close ?? [];
     const validCloses = closes.filter((c): c is number => c != null);
-
     if (validCloses.length < 2) return null;
 
-    const currentPrice = meta.regularMarketPrice ?? validCloses[validCloses.length - 1];
+    const regularPrice: number = meta.regularMarketPrice ?? validCloses[validCloses.length - 1];
+    const regularTime: number = meta.regularMarketTime ?? 0;
+    const postPrice: number | undefined = meta.postMarketPrice;
+    const postTime: number = meta.postMarketTime ?? 0;
+    const prePrice: number | undefined = meta.preMarketPrice;
+    const preTime: number = meta.preMarketTime ?? 0;
+
+    // 타임스탬프 기준으로 가장 최신 가격 선택 (프리/애프터마켓 반영)
+    let currentPrice = regularPrice;
+    let priceLabel: string | undefined;
+    if (postPrice && postTime > regularTime && postTime > preTime) {
+      currentPrice = postPrice;
+      priceLabel = '애프터마켓';
+    } else if (prePrice && preTime > regularTime) {
+      currentPrice = prePrice;
+      priceLabel = '프리마켓';
+    }
+
+    // prevClose = 어제 종가 기준 (하루 전체 등락 반영)
     const prevClose = validCloses[validCloses.length - 2];
 
     if (!currentPrice || !prevClose) return null;
-
-    return { currentPrice, prevClose };
+    return { currentPrice, prevClose, priceLabel };
   } catch {
     return null;
   }

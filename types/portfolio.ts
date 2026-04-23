@@ -31,6 +31,7 @@ export interface HoldingWithMeta extends RawHolding {
   todayGainRate: number; // 오늘 수익률 %
   prevClose: number; // 전일종가 (단위 기준)
   priceUnavailable?: boolean; // 현재가 조회 실패 여부
+  priceLabel?: string; // e.g. 'NXT 애프터마켓 16:31', '프리마켓'
 }
 
 export interface ConsolidatedHolding {
@@ -47,6 +48,7 @@ export interface ConsolidatedHolding {
   todayGainAmount: number; // KRW
   todayGainRate: number; // %
   priceUnavailable?: boolean;
+  priceLabel?: string;
   byAccount: {
     account: string;
     qty: number;
@@ -82,7 +84,7 @@ export interface PortfolioSummary {
 
 export type PriceMap = Record<
   string,
-  { currentPrice: number; prevClose: number } | null
+  { currentPrice: number; prevClose: number; priceLabel?: string } | null
 >;
 
 // 미래 자산 예측 관련 타입

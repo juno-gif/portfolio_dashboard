@@ -1,5 +1,7 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
 import { ConsolidatedHolding } from '@/types/portfolio';
 import {
   Sheet,
@@ -15,17 +17,58 @@ interface StockDetailDrawerProps {
   holding: ConsolidatedHolding | null;
   open: boolean;
   onClose: () => void;
+  exchangeRate?: number;
 }
 
 export default function StockDetailDrawer({
   holding,
   open,
   onClose,
+  exchangeRate = 1370,
 }: StockDetailDrawerProps) {
   if (!holding) return null;
 
+  const isUSD = holding.단위 === 'USD';
   const todayPositive = holding.todayGainRate >= 0;
   const totalPositive = holding.gainRate >= 0;
+  const gainPositive = holding.gainAmount >= 0;
+  const costAmount = holding.avgCost * holding.totalQty;
+  // USD 종목: avgCost(KRW)를 달러로 환산
+  const avgCostDisplay = isUSD ? holding.avgCost / exchangeRate : holding.avgCost;
+  const currentPriceDisplay = holding.currentPrice;
+  const fmtCurrency = (v: number) =>
+    isUSD
+      ? `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : `₩${Math.round(v).toLocaleString('ko-KR')}`;
+  const fmtAmount = (krw: number) =>
+    isUSD
+      ? `$${Math.round(krw / exchangeRate).toLocaleString('en-US')}`
+      : `₩${Math.round(krw / 10000).toLocaleString('ko-KR')}만`;
+  const fmtGain = (krw: number) => {
+    const sign = krw >= 0 ? '+' : '-';
+    const abs = Math.abs(krw);
+    return isUSD
+      ? `${sign}$${Math.round(abs / exchangeRate).toLocaleString('en-US')}`
+      : `${sign}₩${Math.round(abs / 10000).toLocaleString('ko-KR')}만`;
+  };
+
+  const [chartData, setChartData] = useState<{ date: string; price: number }[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || !holding) return;
+    setChartData([]);
+    setChartLoading(true);
+    fetch(`/api/chart?ticker=${encodeURIComponent(holding.종목번호)}&unit=${holding.단위}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.dates && d?.prices) {
+          setChartData(d.dates.map((date: string, i: number) => ({ date, price: d.prices[i] })));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setChartLoading(false));
+  }, [open, holding?.종목번호]);
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -40,30 +83,139 @@ export default function StockDetailDrawer({
           </SheetTitle>
         </SheetHeader>
 
+        {/* 주가 차트 */}
+        <div className="mb-6 h-44">
+          {chartLoading ? (
+            <div className="h-full bg-muted rounded-lg animate-pulse" />
+          ) : chartData.length > 0 ? (() => {
+            const isUp = chartData[chartData.length - 1].price >= chartData[0].price;
+            const color = isUp ? '#22c55e' : '#ef4444';
+            const prices = chartData.map((d) => d.price);
+            const minP = Math.min(...prices);
+            const maxP = Math.max(...prices);
+            const minIdx = prices.indexOf(minP);
+            const maxIdx = prices.indexOf(maxP);
+            const pad = (maxP - minP) * 0.15 || 1;
+            const isUSD = holding.단위 === 'USD';
+            const fmtP = (p: number) => isUSD ? `$${p.toFixed(2)}` : `₩${Math.round(p).toLocaleString('ko-KR')}`;
+            const fmtDate = (dateStr: string) => dateStr.slice(5).replace('-', '/');
+            const total = chartData.length;
+            const minAnchor = minIdx > total * 0.7 ? 'end' : 'start';
+            const maxAnchor = maxIdx > total * 0.7 ? 'end' : 'start';
+            const maxLabel = `최고 ${fmtP(maxP)} (${fmtDate(chartData[maxIdx].date)})`;
+            const minLabel = `최저 ${fmtP(minP)} (${fmtDate(chartData[minIdx].date)})`;
+            return (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 20, right: 4, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={color} stopOpacity={0.2} />
+                      <stop offset="95%" stopColor={color} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10 }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => v.slice(5)}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis hide domain={[minP - pad, maxP + pad]} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const { date, price } = payload[0].payload;
+                      return (
+                        <div className="bg-background border rounded px-2 py-1 text-xs shadow">
+                          <p className="text-muted-foreground">{date}</p>
+                          <p className="font-semibold">{price.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Area type="monotone" dataKey="price" stroke={color} strokeWidth={1.5} fill="url(#chartGrad)" dot={false} />
+                  <ReferenceDot
+                    x={chartData[maxIdx].date}
+                    y={maxP}
+                    r={3}
+                    fill="#ef4444"
+                    stroke="white"
+                    strokeWidth={1}
+                    label={{
+                      value: maxLabel,
+                      position: 'top',
+                      fontSize: 9,
+                      fill: '#ef4444',
+                      offset: 4,
+                      textAnchor: maxAnchor,
+                    }}
+                  />
+                  <ReferenceDot
+                    x={chartData[minIdx].date}
+                    y={minP}
+                    r={3}
+                    fill="#3b82f6"
+                    stroke="white"
+                    strokeWidth={1}
+                    label={{
+                      value: minLabel,
+                      position: 'bottom',
+                      fontSize: 9,
+                      fill: '#3b82f6',
+                      offset: 4,
+                      textAnchor: minAnchor,
+                    }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            );
+          })() : null}
+        </div>
+
         {/* 요약 지표 */}
         <div className="grid grid-cols-2 gap-4 mb-6">
+          {/* Row 1 */}
           <div className="bg-muted/50 rounded-lg p-3">
             <p className="text-xs text-muted-foreground">총 보유수량</p>
             <p className="text-lg font-bold">{holding.totalQty.toLocaleString('ko-KR')}주</p>
           </div>
           <div className="bg-muted/50 rounded-lg p-3">
-            <p className="text-xs text-muted-foreground">총 평가금액</p>
+            <p className="text-xs text-muted-foreground">평가이익</p>
+            <p className={`text-lg font-bold ${gainPositive ? 'text-green-500' : 'text-red-500'}`}>
+              {fmtGain(holding.gainAmount)}
+            </p>
+          </div>
+          {/* Row 2 */}
+          <div className="bg-muted/50 rounded-lg p-3">
+            <p className="text-xs text-muted-foreground">매수금액</p>
             <p className="text-lg font-bold">
-              ₩{Math.round(holding.evalAmount / 10000).toLocaleString('ko-KR')}만
+              {fmtAmount(costAmount)}
             </p>
           </div>
           <div className="bg-muted/50 rounded-lg p-3">
+            <p className="text-xs text-muted-foreground">총 평가금액</p>
+            <p className="text-lg font-bold">
+              {fmtAmount(holding.evalAmount)}
+            </p>
+          </div>
+          {/* Row 3 */}
+          <div className="bg-muted/50 rounded-lg p-3">
             <p className="text-xs text-muted-foreground">평단가</p>
             <p className="text-lg font-bold">
-              ₩{Math.round(holding.avgCost).toLocaleString('ko-KR')}
+              {fmtCurrency(avgCostDisplay)}
             </p>
           </div>
           <div className="bg-muted/50 rounded-lg p-3">
             <p className="text-xs text-muted-foreground">현재 주가</p>
             <p className={`text-lg font-bold ${todayPositive ? 'text-green-500' : 'text-red-500'}`}>
-              ₩{Math.round(holding.currentPrice).toLocaleString('ko-KR')}
+              {fmtCurrency(currentPriceDisplay)}
             </p>
+            {holding.priceLabel && (
+              <p className="text-[10px] text-muted-foreground mt-0.5">{holding.priceLabel}</p>
+            )}
           </div>
+          {/* Row 4 */}
           <div className="bg-muted/50 rounded-lg p-3">
             <p className="text-xs text-muted-foreground">오늘 수익률</p>
             <p className={`text-lg font-bold ${todayPositive ? 'text-green-500' : 'text-red-500'}`}>

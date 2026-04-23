@@ -64,6 +64,7 @@ interface MonthGroup {
 export default function DividendView({ holdings, exchangeRate }: Props) {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const [data, setData] = useState<HoldingDividend[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -210,6 +211,12 @@ export default function DividendView({ holdings, exchangeRate }: Props) {
     return groups;
   }, [yearEvents, selectedYear]);
 
+  // 월 필터 적용
+  const visibleGroups = useMemo(
+    () => selectedMonth === null ? monthGroups : monthGroups.filter((g) => g.monthIndex === selectedMonth),
+    [monthGroups, selectedMonth]
+  );
+
   const years = [currentYear - 1, currentYear, currentYear + 1];
 
   // Custom label renderer for bar chart
@@ -255,7 +262,7 @@ export default function DividendView({ holdings, exchangeRate }: Props) {
             {years.map((y) => (
               <button
                 key={y}
-                onClick={() => setSelectedYear(y)}
+                onClick={() => { setSelectedYear(y); setSelectedMonth(null); }}
                 className={`px-3 py-1 text-xs rounded-full border transition-colors ${
                   selectedYear === y
                     ? 'bg-primary text-primary-foreground border-primary'
@@ -310,21 +317,35 @@ export default function DividendView({ holdings, exchangeRate }: Props) {
                 formatter={(value: number | undefined) => [value != null ? formatKRW(value) : '—', '배당금']}
                 contentStyle={{ fontSize: 12 }}
               />
-              <Bar dataKey="amount" radius={[4, 4, 0, 0]} maxBarSize={40}>
+              <Bar
+                dataKey="amount"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={40}
+                cursor="pointer"
+                onClick={(_data, index) =>
+                  setSelectedMonth((prev) => (prev === index ? null : index))
+                }
+              >
                 <LabelList dataKey="amount" content={renderCustomLabel as unknown as React.ReactElement} />
-                {chartData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={
-                      entry.amount === 0
-                        ? 'transparent'
-                        : entry.hasConfirmed
-                        ? 'hsl(var(--primary))'
-                        : 'hsl(var(--muted-foreground))'
-                    }
-                    opacity={entry.hasProjected ? 0.5 : 1}
-                  />
-                ))}
+                {chartData.map((entry, index) => {
+                  const isSelected = selectedMonth === index;
+                  const dimmed = selectedMonth !== null && !isSelected;
+                  return (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={
+                        entry.amount === 0
+                          ? 'transparent'
+                          : entry.hasConfirmed
+                          ? 'hsl(var(--primary))'
+                          : 'hsl(var(--muted-foreground))'
+                      }
+                      opacity={dimmed ? 0.25 : entry.hasProjected ? 0.5 : 1}
+                      stroke={isSelected ? 'hsl(var(--primary))' : 'none'}
+                      strokeWidth={isSelected ? 2 : 0}
+                    />
+                  );
+                })}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -346,9 +367,20 @@ export default function DividendView({ holdings, exchangeRate }: Props) {
 
         {/* 좌: 월별 배당 리스트 */}
         <div className="xl:col-span-3">
-        {monthGroups.length > 0 ? (
+        {selectedMonth !== null && (
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-muted-foreground">{MONTHS[selectedMonth]} 필터 중</span>
+            <button
+              onClick={() => setSelectedMonth(null)}
+              className="text-xs text-primary hover:underline"
+            >
+              전체 보기
+            </button>
+          </div>
+        )}
+        {visibleGroups.length > 0 ? (
         <div className="space-y-3">
-          {monthGroups.map((group) => (
+          {visibleGroups.map((group) => (
             <div key={group.monthIndex} className="bg-card border rounded-xl overflow-hidden">
               {/* Month header */}
               <div className="flex items-center justify-between px-4 py-2 bg-muted/40 border-b">

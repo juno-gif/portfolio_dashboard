@@ -52,6 +52,7 @@ export function enrichHoldings(
       todayGainRate,
       prevClose,
       priceUnavailable,
+      priceLabel: priceData?.priceLabel,
     };
   });
 }
@@ -111,6 +112,7 @@ export function consolidateHoldings(
       todayGainAmount: totalTodayGain,
       todayGainRate,
       priceUnavailable: first.priceUnavailable,
+      priceLabel: first.priceLabel,
       byAccount,
     };
   });
