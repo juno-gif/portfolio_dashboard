@@ -24,7 +24,7 @@ const SECTOR_COLORS: Record<string, string> = {
   '기타': 'bg-gray-100 text-gray-800',
 };
 
-type SortKey = '종목명' | '섹터' | 'todayGainRate' | 'todayGainAmount' | 'evalAmount' | 'gainRate';
+type SortKey = '종목명' | '섹터' | 'todayGainRate' | 'todayGainAmount' | 'evalAmount' | 'gainRate' | 'gainAmount';
 type SortDir = 'desc' | 'asc';
 
 interface StockListProps {
@@ -81,6 +81,9 @@ export default function StockList({ holdings, onSelect }: StockListProps) {
             <TableHead className={`text-right ${thClass}`} onClick={() => handleSort('gainRate')}>
               전체 수익률{arrow('gainRate')}
             </TableHead>
+            <TableHead className={`text-right ${thClass}`} onClick={() => handleSort('gainAmount')}>
+              평가이익{arrow('gainAmount')}
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -120,6 +123,9 @@ export default function StockList({ holdings, onSelect }: StockListProps) {
                 <TableCell className="text-right whitespace-nowrap">{evalDisplay}</TableCell>
                 <TableCell className={`text-right whitespace-nowrap ${totalPositive ? 'text-green-500' : 'text-red-500'}`}>
                   {formatRate(h.gainRate)}
+                </TableCell>
+                <TableCell className={`text-right whitespace-nowrap ${totalPositive ? 'text-green-500' : 'text-red-500'}`}>
+                  {totalPositive ? '+' : '-'}₩{Math.abs(Math.round(h.gainAmount / 10000)).toLocaleString('ko-KR')}만
                 </TableCell>
               </TableRow>
             );

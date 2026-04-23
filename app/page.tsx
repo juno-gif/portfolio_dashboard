@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import HeroSection from '@/components/HeroSection';
 import AccountCards from '@/components/AccountCards';
 import SectorChart from '@/components/SectorChart';
+import SectorReturns from '@/components/SectorReturns';
 import StockList from '@/components/StockList';
 import StockDetailDrawer from '@/components/StockDetailDrawer';
 import ProjectionView from '@/components/ProjectionView';
@@ -24,12 +25,13 @@ import MiscAssets from '@/components/MiscAssets';
 import SectorManager from '@/components/SectorManager';
 import MarketView from '@/components/MarketView';
 import HoldingsHeatmap from '@/components/HoldingsHeatmap';
+import DividendView from '@/components/DividendView';
 
 const MISC_LS_KEY = 'misc_assets';
 const SECTOR_LS_KEY = 'sector_config';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'portfolio' | 'projection' | 'market'>('portfolio');
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'dividend' | 'projection' | 'market'>('portfolio');
   const [rawHoldings, setRawHoldings] = useState<RawHolding[]>([]);
   const [holdingsWithMeta, setHoldingsWithMeta] = useState<HoldingWithMeta[]>([]);
   const [exchangeRate, setExchangeRate] = useState<number>(1370);
@@ -276,6 +278,10 @@ export default function Home() {
     () => selectedSector ? consolidated.filter((h) => h.sector === selectedSector) : [],
     [consolidated, selectedSector]
   );
+  const allConsolidated = useMemo(
+    () => consolidateHoldings(holdingsWithMeta),
+    [holdingsWithMeta]
+  );
 
   const handleSelectHolding = (h: ConsolidatedHolding) => {
     setSelectedHolding(h);
@@ -347,7 +353,7 @@ export default function Home() {
       }
 
       localStorage.setItem('portfolio_csv', text);
-      await handleUpload(holdings);
+      await handleUpload(holdings, sectorOverrides);
     } catch {
       // 파싱 실패 무시
     }
@@ -427,7 +433,7 @@ export default function Home() {
 
       {/* GNB 탭 */}
       <div className="flex gap-1 border-b border-border pb-0">
-        {(['portfolio', 'projection', 'market'] as const).map((tab) => (
+        {(['portfolio', 'dividend', 'projection', 'market'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -437,7 +443,7 @@ export default function Home() {
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            {tab === 'portfolio' ? '포트폴리오' : tab === 'projection' ? '미래 예측' : '시장 현황'}
+            {tab === 'portfolio' ? '포트폴리오' : tab === 'dividend' ? '배당' : tab === 'projection' ? '미래 예측' : '시장 현황'}
           </button>
         ))}
       </div>
@@ -459,19 +465,31 @@ export default function Home() {
           />
 
           {/* 3. 섹터 차트 + 종목 리스트 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-6">
-            <div className="bg-card border rounded-xl p-4 xl:col-span-2">
-              <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-sm font-semibold">섹터 비중</h2>
-                {selectedAccount && (
-                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">{selectedAccount}</span>
-                )}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-6 items-start">
+            <div className="xl:col-span-2 space-y-4">
+              {/* 섹터별 수익률 */}
+              <div className="bg-card border rounded-xl p-4">
+                <SectorReturns
+                  holdings={filteredHoldings}
+                  sectorDefs={sectorDefs}
+                  selectedSector={selectedSector}
+                  onSectorClick={(s) => setSelectedSector((prev) => prev === s ? null : s)}
+                />
               </div>
-              <SectorChart
-                allocations={sectorAllocations}
-                selectedSector={selectedSector}
-                onSectorClick={setSelectedSector}
-              />
+              {/* 섹터 비중 파이차트 */}
+              <div className="bg-card border rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <h2 className="text-sm font-semibold">섹터 비중</h2>
+                  {selectedAccount && (
+                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">{selectedAccount}</span>
+                  )}
+                </div>
+                <SectorChart
+                  allocations={sectorAllocations}
+                  selectedSector={selectedSector}
+                  onSectorClick={setSelectedSector}
+                />
+              </div>
             </div>
             <div className="bg-card border rounded-xl p-4 overflow-auto xl:col-span-3">
               <div className="flex items-center justify-between mb-3">
@@ -577,6 +595,10 @@ export default function Home() {
             </div>
           )}
         </>
+      )}
+
+      {activeTab === 'dividend' && (
+        <DividendView holdings={allConsolidated} exchangeRate={exchangeRate} />
       )}
 
       {activeTab === 'projection' && (
