@@ -53,6 +53,18 @@ export default function StockDetailDrawer({
             </p>
           </div>
           <div className="bg-muted/50 rounded-lg p-3">
+            <p className="text-xs text-muted-foreground">평단가</p>
+            <p className="text-lg font-bold">
+              ₩{Math.round(holding.avgCost).toLocaleString('ko-KR')}
+            </p>
+          </div>
+          <div className="bg-muted/50 rounded-lg p-3">
+            <p className="text-xs text-muted-foreground">현재 주가</p>
+            <p className={`text-lg font-bold ${todayPositive ? 'text-green-500' : 'text-red-500'}`}>
+              ₩{Math.round(holding.currentPrice).toLocaleString('ko-KR')}
+            </p>
+          </div>
+          <div className="bg-muted/50 rounded-lg p-3">
             <p className="text-xs text-muted-foreground">오늘 수익률</p>
             <p className={`text-lg font-bold ${todayPositive ? 'text-green-500' : 'text-red-500'}`}>
               {formatRate(holding.todayGainRate)}
