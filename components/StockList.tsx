@@ -92,7 +92,7 @@ export default function StockList({ holdings, onSelect }: StockListProps) {
             const totalPositive = h.gainRate >= 0;
             const isUSD = h.단위 === 'USD';
             const evalDisplay = isUSD
-              ? `₩${Math.round(h.evalAmount / 10000).toLocaleString('ko-KR')}만 ($${Math.round(h.evalAmount / (h.currentPrice || 1) * (h.currentPrice || 0)).toLocaleString('en-US', { maximumFractionDigits: 0 })})`
+              ? `₩${Math.round(h.evalAmount / 10000).toLocaleString('ko-KR')}만 ($${(h.currentPrice * h.totalQty).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
               : `₩${Math.round(h.evalAmount / 10000).toLocaleString('ko-KR')}만`;
 
             return (

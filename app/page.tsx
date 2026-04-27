@@ -189,6 +189,17 @@ export default function Home() {
     }
   }, [portfolioToken]);
 
+  // 같은 탭에서 토큰이 바뀌면 전체 리로드 (popstate 이벤트 감지)
+  useEffect(() => {
+    const initialToken = new URLSearchParams(window.location.search).get('token');
+    const onPopState = () => {
+      const newToken = new URLSearchParams(window.location.search).get('token');
+      if (newToken !== initialToken) window.location.reload();
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
   // 마운트 시: ?token= → KV → localStorage → 샘플 순서로 로드
   useEffect(() => {
     (async () => {
@@ -197,7 +208,7 @@ export default function Home() {
       const urlToken = params.get('token');
       if (urlToken) {
         try {
-          const res = await fetch(`/api/portfolio?token=${urlToken}`);
+          const res = await fetch(`/api/portfolio?token=${urlToken}`, { cache: 'no-store' });
           if (res.ok) {
             const text = await res.text();
             const file = new File([text], 'portfolio.csv', { type: 'text/csv' });
@@ -215,10 +226,10 @@ export default function Home() {
         }
       }
 
-      // 2) localStorage에 저장된 CSV (토큰이 있었으나 KV 실패한 경우만)
+      // 2) localStorage에 저장된 CSV — 토큰별 키만 허용 (전역 키는 교차 오염 위험)
       if (urlToken) {
         try {
-          const saved = localStorage.getItem('portfolio_csv');
+          const saved = localStorage.getItem(`portfolio_csv_${urlToken}`);
           if (saved) {
             const file = new File([saved], 'portfolio.csv', { type: 'text/csv' });
             const holdings = await parsePortfolioCSV(file);
@@ -230,7 +241,7 @@ export default function Home() {
             return;
           }
         } catch {
-          localStorage.removeItem('portfolio_csv');
+          localStorage.removeItem(`portfolio_csv_${urlToken}`);
         }
       }
 

@@ -52,23 +52,42 @@ export default function StockDetailDrawer({
       : `${sign}₩${Math.round(abs / 10000).toLocaleString('ko-KR')}만`;
   };
 
+  type ChartRange = '1d' | '5d' | '3mo' | '1y';
+  const RANGE_LABELS: { value: ChartRange; label: string }[] = [
+    { value: '1d', label: '1일' },
+    { value: '5d', label: '1주' },
+    { value: '3mo', label: '3개월' },
+    { value: '1y', label: '1년' },
+  ];
+
+  const [chartRange, setChartRange] = useState<ChartRange>('3mo');
   const [chartData, setChartData] = useState<{ date: string; price: number }[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
+  const [isIntraday, setIsIntraday] = useState(false);
+  const [sessionTypes, setSessionTypes] = useState<string[]>([]);
+
+  // 종목이 바뀌면 기간 초기화
+  useEffect(() => {
+    setChartRange('3mo');
+  }, [holding?.종목번호]);
 
   useEffect(() => {
     if (!open || !holding) return;
     setChartData([]);
+    setSessionTypes([]);
     setChartLoading(true);
-    fetch(`/api/chart?ticker=${encodeURIComponent(holding.종목번호)}&unit=${holding.단위}`)
+    fetch(`/api/chart?ticker=${encodeURIComponent(holding.종목번호)}&unit=${holding.단위}&range=${chartRange}`)
       .then((r) => r.json())
       .then((d) => {
         if (d?.dates && d?.prices) {
           setChartData(d.dates.map((date: string, i: number) => ({ date, price: d.prices[i] })));
+          setIsIntraday(d.isIntraday ?? false);
+          setSessionTypes(d.sessionTypes ?? []);
         }
       })
       .catch(() => {})
       .finally(() => setChartLoading(false));
-  }, [open, holding?.종목번호]);
+  }, [open, holding?.종목번호, chartRange]);
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -84,7 +103,24 @@ export default function StockDetailDrawer({
         </SheetHeader>
 
         {/* 주가 차트 */}
-        <div className="mb-6 h-44">
+        <div className="mb-6">
+          {/* 기간 선택 */}
+          <div className="flex gap-1 mb-2 justify-end">
+            {RANGE_LABELS.map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setChartRange(value)}
+                className={`px-2 py-0.5 text-xs rounded transition-colors ${
+                  chartRange === value
+                    ? 'bg-foreground text-background font-semibold'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="h-44">
           {chartLoading ? (
             <div className="h-full bg-muted rounded-lg animate-pulse" />
           ) : chartData.length > 0 ? (() => {
@@ -96,21 +132,41 @@ export default function StockDetailDrawer({
             const minIdx = prices.indexOf(minP);
             const maxIdx = prices.indexOf(maxP);
             const pad = (maxP - minP) * 0.15 || 1;
-            const isUSD = holding.단위 === 'USD';
             const fmtP = (p: number) => isUSD ? `$${p.toFixed(2)}` : `₩${Math.round(p).toLocaleString('ko-KR')}`;
-            const fmtDate = (dateStr: string) => dateStr.slice(5).replace('-', '/');
+            const fmtDate = (dateStr: string) => isIntraday ? dateStr : dateStr.slice(5).replace('-', '/');
             const total = chartData.length;
             const minAnchor = minIdx > total * 0.7 ? 'end' : 'start';
             const maxAnchor = maxIdx > total * 0.7 ? 'end' : 'start';
             const maxLabel = `최고 ${fmtP(maxP)} (${fmtDate(chartData[maxIdx].date)})`;
             const minLabel = `최저 ${fmtP(minP)} (${fmtDate(chartData[minIdx].date)})`;
+
+            // NXT 세션 포함 여부 (KRW 1일 뷰)
+            const hasNxt = sessionTypes.length === chartData.length && sessionTypes.some(s => s === 'NXT');
+            const NXT_COLOR = '#94a3b8'; // slate-400
+            // 세션별 데이터 분리 (경계점은 양쪽에 포함해 선 연결 유지)
+            const dualData = hasNxt ? chartData.map((d, i) => ({
+              date: d.date,
+              krxPrice: sessionTypes[i] === 'KRX' ||
+                (i > 0 && sessionTypes[i - 1] === 'KRX' && sessionTypes[i] === 'NXT') ||
+                (i < total - 1 && sessionTypes[i + 1] === 'KRX' && sessionTypes[i] === 'NXT')
+                ? d.price : undefined,
+              nxtPrice: sessionTypes[i] === 'NXT' ||
+                (i > 0 && sessionTypes[i - 1] === 'NXT' && sessionTypes[i] === 'KRX') ||
+                (i < total - 1 && sessionTypes[i + 1] === 'NXT' && sessionTypes[i] === 'KRX')
+                ? d.price : undefined,
+            })) : null;
+
             return (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 20, right: 4, left: 0, bottom: 0 }}>
+                <AreaChart data={dualData ?? chartData} margin={{ top: 20, right: 4, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor={color} stopOpacity={0.2} />
                       <stop offset="95%" stopColor={color} stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="chartGradNxt" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={NXT_COLOR} stopOpacity={0.15} />
+                      <stop offset="95%" stopColor={NXT_COLOR} stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <XAxis
@@ -118,23 +174,33 @@ export default function StockDetailDrawer({
                     tick={{ fontSize: 10 }}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(v) => v.slice(5)}
+                    tickFormatter={(v) => isIntraday ? v : v.slice(5)}
                     interval="preserveStartEnd"
                   />
                   <YAxis hide domain={[minP - pad, maxP + pad]} />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
-                      const { date, price } = payload[0].payload;
+                      const entry = payload.find(p => p.value != null) ?? payload[0];
+                      const date: string = entry.payload.date;
+                      const price: number = (entry.value as number) ?? entry.payload.price;
+                      const isNxtPoint = dualData && entry.payload.nxtPrice != null && entry.payload.krxPrice == null;
                       return (
                         <div className="bg-background border rounded px-2 py-1 text-xs shadow">
-                          <p className="text-muted-foreground">{date}</p>
+                          <p className="text-muted-foreground">{date}{isNxtPoint ? ' · NXT' : ''}</p>
                           <p className="font-semibold">{price.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</p>
                         </div>
                       );
                     }}
                   />
-                  <Area type="monotone" dataKey="price" stroke={color} strokeWidth={1.5} fill="url(#chartGrad)" dot={false} />
+                  {dualData ? (
+                    <>
+                      <Area type="monotone" dataKey="nxtPrice" stroke={NXT_COLOR} strokeWidth={1.5} fill="url(#chartGradNxt)" dot={false} connectNulls={false} />
+                      <Area type="monotone" dataKey="krxPrice" stroke={color} strokeWidth={1.5} fill="url(#chartGrad)" dot={false} connectNulls={false} />
+                    </>
+                  ) : (
+                    <Area type="monotone" dataKey="price" stroke={color} strokeWidth={1.5} fill="url(#chartGrad)" dot={false} />
+                  )}
                   <ReferenceDot
                     x={chartData[maxIdx].date}
                     y={maxP}
@@ -171,6 +237,7 @@ export default function StockDetailDrawer({
               </ResponsiveContainer>
             );
           })() : null}
+          </div>
         </div>
 
         {/* 요약 지표 */}
@@ -196,7 +263,9 @@ export default function StockDetailDrawer({
           <div className="bg-muted/50 rounded-lg p-3">
             <p className="text-xs text-muted-foreground">총 평가금액</p>
             <p className="text-lg font-bold">
-              {fmtAmount(holding.evalAmount)}
+              {isUSD
+                ? `$${(holding.currentPrice * holding.totalQty).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : fmtAmount(holding.evalAmount)}
             </p>
           </div>
           {/* Row 3 */}
