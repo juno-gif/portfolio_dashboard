@@ -19,6 +19,7 @@ async function fetchNaverIntraday(symbol: string): Promise<{
   dates: string[];
   prices: number[];
   sessionTypes: string[];
+  dataDate: string;
 } | null> {
   const res = await fetch(
     `https://fchart.stock.naver.com/sise.nhn?symbol=${symbol}&timeframe=minute&count=600&requestType=0`,
