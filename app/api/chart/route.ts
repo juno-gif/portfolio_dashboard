@@ -55,7 +55,7 @@ async function fetchNaverIntraday(symbol: string): Promise<{
     sessionTypes.push(session);
   }
 
-  return { dates, prices, sessionTypes };
+  return { dates, prices, sessionTypes, dataDate: latestDay };
 }
 
 export async function GET(request: NextRequest) {
@@ -74,7 +74,9 @@ export async function GET(request: NextRequest) {
     try {
       const result = await fetchNaverIntraday(ticker);
       if (!result) return NextResponse.json(null);
-      return NextResponse.json({ ...result, currency: 'KRW', isIntraday: true });
+      // dataDate: YYYYMMDD → YYYY-MM-DD (오늘 날짜와 비교해 전일 여부 확인용)
+      const kstToday = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, '');
+      return NextResponse.json({ ...result, currency: 'KRW', isIntraday: true, isPrevDay: result.dataDate !== kstToday });
     } catch {
       return NextResponse.json(null);
     }

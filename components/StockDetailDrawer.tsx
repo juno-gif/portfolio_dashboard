@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
+import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
 import { ConsolidatedHolding } from '@/types/portfolio';
 import {
   Sheet,
@@ -65,6 +65,7 @@ export default function StockDetailDrawer({
   const [chartLoading, setChartLoading] = useState(false);
   const [isIntraday, setIsIntraday] = useState(false);
   const [sessionTypes, setSessionTypes] = useState<string[]>([]);
+  const [isPrevDay, setIsPrevDay] = useState(false);
 
   // 종목이 바뀌면 기간 초기화
   useEffect(() => {
@@ -75,6 +76,7 @@ export default function StockDetailDrawer({
     if (!open || !holding) return;
     setChartData([]);
     setSessionTypes([]);
+    setIsPrevDay(false);
     setChartLoading(true);
     fetch(`/api/chart?ticker=${encodeURIComponent(holding.종목번호)}&unit=${holding.단위}&range=${chartRange}`)
       .then((r) => r.json())
@@ -83,6 +85,7 @@ export default function StockDetailDrawer({
           setChartData(d.dates.map((date: string, i: number) => ({ date, price: d.prices[i] })));
           setIsIntraday(d.isIntraday ?? false);
           setSessionTypes(d.sessionTypes ?? []);
+          setIsPrevDay(d.isPrevDay ?? false);
         }
       })
       .catch(() => {})
@@ -105,7 +108,10 @@ export default function StockDetailDrawer({
         {/* 주가 차트 */}
         <div className="mb-6">
           {/* 기간 선택 */}
-          <div className="flex gap-1 mb-2 justify-end">
+          <div className="flex gap-1 mb-2 justify-end items-center">
+            {isPrevDay && chartRange === '1d' && (
+              <span className="text-[10px] text-amber-500 mr-auto">전일 기준</span>
+            )}
             {RANGE_LABELS.map(({ value, label }) => (
               <button
                 key={value}
@@ -143,22 +149,26 @@ export default function StockDetailDrawer({
             // NXT 세션 포함 여부 (KRW 1일 뷰)
             const hasNxt = sessionTypes.length === chartData.length && sessionTypes.some(s => s === 'NXT');
             const NXT_COLOR = '#94a3b8'; // slate-400
-            // 세션별 데이터 분리 (경계점은 양쪽에 포함해 선 연결 유지)
-            const dualData = hasNxt ? chartData.map((d, i) => ({
-              date: d.date,
-              krxPrice: sessionTypes[i] === 'KRX' ||
-                (i > 0 && sessionTypes[i - 1] === 'KRX' && sessionTypes[i] === 'NXT') ||
-                (i < total - 1 && sessionTypes[i + 1] === 'KRX' && sessionTypes[i] === 'NXT')
-                ? d.price : undefined,
-              nxtPrice: sessionTypes[i] === 'NXT' ||
-                (i > 0 && sessionTypes[i - 1] === 'NXT' && sessionTypes[i] === 'KRX') ||
-                (i < total - 1 && sessionTypes[i + 1] === 'NXT' && sessionTypes[i] === 'KRX')
-                ? d.price : undefined,
-            })) : null;
+            // 세션별 데이터 분리: null 사용 (undefined는 recharts에서 처리 불안정)
+            // 경계점은 양쪽에 포함해 선이 끊기지 않도록 연결
+            const dualData = hasNxt ? chartData.map((d, i) => {
+              const isNxt = sessionTypes[i] === 'NXT';
+              const prevIsKrx = i > 0 && sessionTypes[i - 1] === 'KRX';
+              const nextIsKrx = i < total - 1 && sessionTypes[i + 1] === 'KRX';
+              const prevIsNxt = i > 0 && sessionTypes[i - 1] === 'NXT';
+              const nextIsNxt = i < total - 1 && sessionTypes[i + 1] === 'NXT';
+              const showAsNxt = isNxt || (sessionTypes[i] === 'KRX' && (prevIsNxt || nextIsNxt));
+              const showAsKrx = !isNxt || (isNxt && (prevIsKrx || nextIsKrx));
+              return {
+                date: d.date,
+                krxPrice: showAsKrx ? d.price : null,
+                nxtPrice: showAsNxt ? d.price : null,
+              };
+            }) : null;
 
             return (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={dualData ?? chartData} margin={{ top: 20, right: 4, left: 0, bottom: 0 }}>
+                <ComposedChart data={dualData ?? chartData} margin={{ top: 20, right: 4, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor={color} stopOpacity={0.2} />
@@ -183,20 +193,21 @@ export default function StockDetailDrawer({
                       if (!active || !payload?.length) return null;
                       const entry = payload.find(p => p.value != null) ?? payload[0];
                       const date: string = entry.payload.date;
-                      const price: number = (entry.value as number) ?? entry.payload.price;
+                      const price: number = (entry.value as number) ?? entry.payload.krxPrice ?? entry.payload.nxtPrice ?? entry.payload.price;
                       const isNxtPoint = dualData && entry.payload.nxtPrice != null && entry.payload.krxPrice == null;
                       return (
                         <div className="bg-background border rounded px-2 py-1 text-xs shadow">
                           <p className="text-muted-foreground">{date}{isNxtPoint ? ' · NXT' : ''}</p>
-                          <p className="font-semibold">{price.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</p>
+                          <p className="font-semibold">{price?.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</p>
                         </div>
                       );
                     }}
                   />
                   {dualData ? (
                     <>
-                      <Area type="monotone" dataKey="nxtPrice" stroke={NXT_COLOR} strokeWidth={1.5} fill="url(#chartGradNxt)" dot={false} connectNulls={false} />
+                      {/* KRX 먼저 (뒤), NXT 위에 (앞) 렌더링 */}
                       <Area type="monotone" dataKey="krxPrice" stroke={color} strokeWidth={1.5} fill="url(#chartGrad)" dot={false} connectNulls={false} />
+                      <Area type="monotone" dataKey="nxtPrice" stroke={NXT_COLOR} strokeWidth={1.5} fill="url(#chartGradNxt)" dot={false} connectNulls={false} />
                     </>
                   ) : (
                     <Area type="monotone" dataKey="price" stroke={color} strokeWidth={1.5} fill="url(#chartGrad)" dot={false} />
@@ -233,7 +244,7 @@ export default function StockDetailDrawer({
                       textAnchor: minAnchor,
                     }}
                   />
-                </AreaChart>
+                </ComposedChart>
               </ResponsiveContainer>
             );
           })() : null}
