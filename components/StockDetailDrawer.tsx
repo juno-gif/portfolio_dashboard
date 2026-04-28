@@ -149,16 +149,25 @@ export default function StockDetailDrawer({
             // NXT 세션 포함 여부 (KRW 1일 뷰)
             const hasNxt = sessionTypes.length === chartData.length && sessionTypes.some(s => s === 'NXT');
             const NXT_COLOR = '#94a3b8'; // slate-400
-            // NXT 오버레이: 경계점 포함해 선이 끊기지 않도록 연결
-            const nxtOverlay = hasNxt ? chartData.map((d, i) => ({
-              date: d.date,
-              price: d.price,
-              nxtPrice: (
-                sessionTypes[i] === 'NXT' ||
-                (sessionTypes[i] === 'KRX' && i > 0 && sessionTypes[i - 1] === 'NXT') ||
-                (sessionTypes[i] === 'KRX' && i < total - 1 && sessionTypes[i + 1] === 'NXT')
-              ) ? d.price : null,
-            })) : null;
+            // KRX Area + NXT Line 분리: 경계점 양쪽에 포함해 선이 끊기지 않도록 연결
+            const nxtOverlay = hasNxt ? chartData.map((d, i) => {
+              const isNxt = sessionTypes[i] === 'NXT';
+              const adjKrx = isNxt && (
+                (i > 0 && sessionTypes[i - 1] === 'KRX') ||
+                (i < total - 1 && sessionTypes[i + 1] === 'KRX')
+              );
+              const adjNxt = !isNxt && (
+                (i > 0 && sessionTypes[i - 1] === 'NXT') ||
+                (i < total - 1 && sessionTypes[i + 1] === 'NXT')
+              );
+              return {
+                date: d.date,
+                // KRX Area: KRX 구간 + NXT 경계점 (선 연결용)
+                krxPrice: (!isNxt || adjKrx) ? d.price : null,
+                // NXT Line: NXT 구간 + KRX 경계점 (선 연결용)
+                nxtPrice: (isNxt || adjNxt) ? d.price : null,
+              };
+            }) : null;
 
             return (
               <ResponsiveContainer width="100%" height="100%">
@@ -183,8 +192,8 @@ export default function StockDetailDrawer({
                       if (!active || !payload?.length) return null;
                       const entry = payload[0];
                       const date: string = entry.payload.date;
-                      const price: number = entry.payload.price;
-                      const isNxtPoint = nxtOverlay && entry.payload.nxtPrice != null;
+                      const price: number = entry.payload.krxPrice ?? entry.payload.nxtPrice ?? entry.payload.price;
+                      const isNxtPoint = nxtOverlay && entry.payload.krxPrice == null && entry.payload.nxtPrice != null;
                       return (
                         <div className="bg-background border rounded px-2 py-1 text-xs shadow">
                           <p className="text-muted-foreground">{date}{isNxtPoint ? ' · NXT' : ''}</p>
@@ -193,9 +202,9 @@ export default function StockDetailDrawer({
                       );
                     }}
                   />
-                  {/* 기본 Area: 전체 데이터 (KRX 색상) */}
-                  <Area type="monotone" dataKey="price" stroke={color} strokeWidth={1.5} fill="url(#chartGrad)" dot={false} />
-                  {/* NXT 구간 오버레이 Line (gray) */}
+                  {/* KRX Area: KRX 구간만 fill, NXT는 null */}
+                  <Area type="monotone" dataKey={nxtOverlay ? 'krxPrice' : 'price'} stroke={color} strokeWidth={1.5} fill="url(#chartGrad)" dot={false} connectNulls={false} />
+                  {/* NXT Line 오버레이: NXT 구간만 gray선 */}
                   {nxtOverlay && (
                     <Line type="monotone" dataKey="nxtPrice" stroke={NXT_COLOR} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} />
                   )}
