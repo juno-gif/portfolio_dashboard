@@ -149,34 +149,24 @@ export default function StockDetailDrawer({
             // NXT 세션 포함 여부 (KRW 1일 뷰)
             const hasNxt = sessionTypes.length === chartData.length && sessionTypes.some(s => s === 'NXT');
             const NXT_COLOR = '#94a3b8'; // slate-400
-            // 세션별 데이터 분리: null 사용 (undefined는 recharts에서 처리 불안정)
-            // 경계점은 양쪽에 포함해 선이 끊기지 않도록 연결
-            const dualData = hasNxt ? chartData.map((d, i) => {
-              const isNxt = sessionTypes[i] === 'NXT';
-              const prevIsKrx = i > 0 && sessionTypes[i - 1] === 'KRX';
-              const nextIsKrx = i < total - 1 && sessionTypes[i + 1] === 'KRX';
-              const prevIsNxt = i > 0 && sessionTypes[i - 1] === 'NXT';
-              const nextIsNxt = i < total - 1 && sessionTypes[i + 1] === 'NXT';
-              const showAsNxt = isNxt || (sessionTypes[i] === 'KRX' && (prevIsNxt || nextIsNxt));
-              const showAsKrx = !isNxt || (isNxt && (prevIsKrx || nextIsKrx));
-              return {
-                date: d.date,
-                krxPrice: showAsKrx ? d.price : null,
-                nxtPrice: showAsNxt ? d.price : null,
-              };
-            }) : null;
+            // NXT 오버레이: 경계점 포함해 선이 끊기지 않도록 연결
+            const nxtOverlay = hasNxt ? chartData.map((d, i) => ({
+              date: d.date,
+              price: d.price,
+              nxtPrice: (
+                sessionTypes[i] === 'NXT' ||
+                (sessionTypes[i] === 'KRX' && i > 0 && sessionTypes[i - 1] === 'NXT') ||
+                (sessionTypes[i] === 'KRX' && i < total - 1 && sessionTypes[i + 1] === 'NXT')
+              ) ? d.price : null,
+            })) : null;
 
             return (
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={dualData ?? chartData} margin={{ top: 20, right: 4, left: 0, bottom: 0 }}>
+                <ComposedChart data={nxtOverlay ?? chartData} margin={{ top: 20, right: 4, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor={color} stopOpacity={0.2} />
                       <stop offset="95%" stopColor={color} stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="chartGradNxt" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={NXT_COLOR} stopOpacity={0.15} />
-                      <stop offset="95%" stopColor={NXT_COLOR} stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <XAxis
@@ -191,10 +181,10 @@ export default function StockDetailDrawer({
                   <Tooltip
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
-                      const entry = payload.find(p => p.value != null) ?? payload[0];
+                      const entry = payload[0];
                       const date: string = entry.payload.date;
-                      const price: number = (entry.value as number) ?? entry.payload.krxPrice ?? entry.payload.nxtPrice ?? entry.payload.price;
-                      const isNxtPoint = dualData && entry.payload.nxtPrice != null && entry.payload.krxPrice == null;
+                      const price: number = entry.payload.price;
+                      const isNxtPoint = nxtOverlay && entry.payload.nxtPrice != null;
                       return (
                         <div className="bg-background border rounded px-2 py-1 text-xs shadow">
                           <p className="text-muted-foreground">{date}{isNxtPoint ? ' · NXT' : ''}</p>
@@ -203,14 +193,11 @@ export default function StockDetailDrawer({
                       );
                     }}
                   />
-                  {dualData ? (
-                    <>
-                      {/* KRX 먼저 (뒤), NXT 위에 (앞) 렌더링 */}
-                      <Area type="monotone" dataKey="krxPrice" stroke={color} strokeWidth={1.5} fill="url(#chartGrad)" dot={false} connectNulls={false} />
-                      <Area type="monotone" dataKey="nxtPrice" stroke={NXT_COLOR} strokeWidth={1.5} fill="url(#chartGradNxt)" dot={false} connectNulls={false} />
-                    </>
-                  ) : (
-                    <Area type="monotone" dataKey="price" stroke={color} strokeWidth={1.5} fill="url(#chartGrad)" dot={false} />
+                  {/* 기본 Area: 전체 데이터 (KRX 색상) */}
+                  <Area type="monotone" dataKey="price" stroke={color} strokeWidth={1.5} fill="url(#chartGrad)" dot={false} />
+                  {/* NXT 구간 오버레이 Line (gray) */}
+                  {nxtOverlay && (
+                    <Line type="monotone" dataKey="nxtPrice" stroke={NXT_COLOR} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} />
                   )}
                   <ReferenceDot
                     x={chartData[maxIdx].date}
