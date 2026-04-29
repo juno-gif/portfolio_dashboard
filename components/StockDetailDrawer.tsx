@@ -75,10 +75,10 @@ export default function StockDetailDrawer({
     setEtfHoldings(null);
   }, [holding?.종목번호]);
 
-  // ETF 구성 fetch (USD 종목만)
+  // ETF 구성 fetch (USD/KRW 모두)
   useEffect(() => {
-    if (!open || !holding || holding.단위 !== 'USD') return;
-    fetch(`/api/etf-holdings?ticker=${encodeURIComponent(holding.종목번호)}`)
+    if (!open || !holding) return;
+    fetch(`/api/etf-holdings?ticker=${encodeURIComponent(holding.종목번호)}&unit=${holding.단위}`)
       .then((r) => r.json())
       .then((d) => { if (d?.holdings?.length) setEtfHoldings(d.holdings); })
       .catch(() => {});
@@ -351,7 +351,10 @@ export default function StockDetailDrawer({
             <div className="space-y-2">
               {etfHoldings.map((h) => (
                 <div key={h.symbol} className="flex items-center gap-2">
-                  <span className="text-xs font-medium w-14 shrink-0">{h.symbol}</span>
+                  <div className="w-24 shrink-0">
+                    <div className="text-xs font-medium truncate">{h.name || h.symbol}</div>
+                    {h.name && <div className="text-[10px] text-muted-foreground">{h.symbol}</div>}
+                  </div>
                   <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
                     <div
                       className="h-full bg-foreground/40 rounded-full"

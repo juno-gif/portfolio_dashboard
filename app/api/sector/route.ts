@@ -1,6 +1,8 @@
 import { Redis } from '@upstash/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 const redis = new Redis({ url: process.env.PORTFOLIO_KV_REST_API_URL, token: process.env.PORTFOLIO_KV_REST_API_TOKEN });
 
 // GET /api/sector?token=xxx → 저장된 섹터 설정 반환
@@ -15,7 +17,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '데이터를 찾을 수 없습니다' }, { status: 404 });
   }
 
-  return NextResponse.json(typeof data === 'string' ? JSON.parse(data) : data);
+  return NextResponse.json(typeof data === 'string' ? JSON.parse(data) : data, {
+    headers: { 'Cache-Control': 'no-store, private' },
+  });
 }
 
 // POST /api/sector?token=xxx → 섹터 설정 저장

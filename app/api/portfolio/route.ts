@@ -1,6 +1,10 @@
 import { Redis } from '@upstash/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
+const NO_CACHE = { 'Cache-Control': 'no-store, private' };
+
 const redis = new Redis({ url: process.env.PORTFOLIO_KV_REST_API_URL, token: process.env.PORTFOLIO_KV_REST_API_TOKEN });
 
 const CORS = {
@@ -26,7 +30,7 @@ export async function GET(request: NextRequest) {
   }
 
   return new NextResponse(csv, {
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', ...NO_CACHE },
   });
 }
 

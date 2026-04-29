@@ -43,18 +43,51 @@ async function getYFCrumb(): Promise<{ crumb: string; cookie: string } | null> {
 
 export type ETFHolding = { symbol: string; name: string; pct: number };
 
+async function fetchKrwEtfHoldings(ticker: string): Promise<ETFHolding[] | null> {
+  const res = await fetch(
+    `https://m.stock.naver.com/api/stock/${encodeURIComponent(ticker)}/etfAnalysis`,
+    {
+      headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15' },
+      signal: AbortSignal.timeout(8000),
+    }
+  );
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  const raw: Array<{ itemCode: string; itemName: string; etfWeight: string }> =
+    data?.etfTop10MajorConstituentAssets;
+  if (!raw?.length) return null;
+
+  return raw.map((h) => ({
+    symbol: h.itemCode,
+    name: h.itemName,
+    pct: parseFloat(h.etfWeight) || 0,
+  }));
+}
+
 export async function GET(request: NextRequest) {
   const ticker = request.nextUrl.searchParams.get('ticker');
+  const unit = request.nextUrl.searchParams.get('unit') ?? 'USD';
   if (!ticker) return NextResponse.json(null);
 
   // Redis 캐시 확인 (하루 캐시 — ETF 구성은 자주 안 바뀜)
-  const cacheKey = `etf:holdings:${ticker.toUpperCase()}`;
+  const cacheKey = `etf:holdings:${unit}:${ticker.toUpperCase()}`;
   const cached = await redis.get<string>(cacheKey);
   if (cached) {
     try { return NextResponse.json(JSON.parse(cached)); } catch { /* ignore */ }
   }
 
   try {
+    // 국내 ETF: Naver Finance mobile API
+    if (unit === 'KRW') {
+      const holdings = await fetchKrwEtfHoldings(ticker);
+      if (!holdings) return NextResponse.json(null);
+      const result = { holdings, updatedAt: new Date().toISOString().slice(0, 10) };
+      await redis.set(cacheKey, JSON.stringify(result), { ex: 60 * 60 * 24 });
+      return NextResponse.json(result);
+    }
+
+    // 해외 ETF: Yahoo Finance
     const auth = await getYFCrumb();
     if (!auth) return NextResponse.json(null);
 
