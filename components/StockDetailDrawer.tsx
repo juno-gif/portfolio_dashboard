@@ -350,18 +350,24 @@ export default function StockDetailDrawer({
             <h3 className="text-sm font-semibold mb-3">ETF 구성 종목 (상위 {etfHoldings.length}개)</h3>
             <div className="space-y-2">
               {etfHoldings.map((h) => (
-                <div key={h.symbol} className="flex items-center gap-2">
+                <div key={h.symbol || h.name} className="flex items-center gap-2">
                   <div className="w-24 shrink-0">
                     <div className="text-xs font-medium truncate">{h.name || h.symbol}</div>
-                    {h.name && <div className="text-[10px] text-muted-foreground">{h.symbol}</div>}
+                    {h.name && h.symbol && <div className="text-[10px] text-muted-foreground">{h.symbol}</div>}
                   </div>
-                  <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className="h-full bg-foreground/40 rounded-full"
-                      style={{ width: `${Math.min(h.pct * 2, 100)}%` }}
-                    />
-                  </div>
-                  <span className="text-xs text-muted-foreground w-10 text-right shrink-0">{h.pct}%</span>
+                  {h.pct !== null ? (
+                    <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="h-full bg-foreground/40 rounded-full"
+                        style={{ width: `${Math.min(h.pct * 2, 100)}%` }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex-1" />
+                  )}
+                  <span className="text-xs text-muted-foreground w-10 text-right shrink-0">
+                    {h.pct !== null ? `${h.pct}%` : '-'}
+                  </span>
                 </div>
               ))}
             </div>
