@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await res.json();
-    const topHoldings = data?.finance?.result?.[0]?.topHoldings;
+    const topHoldings = data?.quoteSummary?.result?.[0]?.topHoldings;
     if (!topHoldings?.holdings?.length) return NextResponse.json(null);
 
     const holdings: ETFHolding[] = topHoldings.holdings.map((h: {
