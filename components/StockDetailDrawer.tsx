@@ -12,6 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { formatRate } from '@/lib/format';
+import { ETFHolding } from '@/app/api/etf-holdings/route';
 
 interface StockDetailDrawerProps {
   holding: ConsolidatedHolding | null;
@@ -66,11 +67,22 @@ export default function StockDetailDrawer({
   const [isIntraday, setIsIntraday] = useState(false);
   const [sessionTypes, setSessionTypes] = useState<string[]>([]);
   const [isPrevDay, setIsPrevDay] = useState(false);
+  const [etfHoldings, setEtfHoldings] = useState<ETFHolding[] | null>(null);
 
-  // 종목이 바뀌면 기간 초기화
+  // 종목이 바뀌면 기간 및 ETF 데이터 초기화
   useEffect(() => {
     setChartRange('3mo');
+    setEtfHoldings(null);
   }, [holding?.종목번호]);
+
+  // ETF 구성 fetch (USD 종목만)
+  useEffect(() => {
+    if (!open || !holding || holding.단위 !== 'USD') return;
+    fetch(`/api/etf-holdings?ticker=${encodeURIComponent(holding.종목번호)}`)
+      .then((r) => r.json())
+      .then((d) => { if (d?.holdings?.length) setEtfHoldings(d.holdings); })
+      .catch(() => {});
+  }, [open, holding?.종목번호]);
 
   useEffect(() => {
     if (!open || !holding) return;
@@ -331,6 +343,27 @@ export default function StockDetailDrawer({
             ))}
           </div>
         </div>
+
+        {/* ETF 구성 */}
+        {etfHoldings && etfHoldings.length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold mb-3">ETF 구성 종목 (상위 {etfHoldings.length}개)</h3>
+            <div className="space-y-2">
+              {etfHoldings.map((h) => (
+                <div key={h.symbol} className="flex items-center gap-2">
+                  <span className="text-xs font-medium w-14 shrink-0">{h.symbol}</span>
+                  <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="h-full bg-foreground/40 rounded-full"
+                      style={{ width: `${Math.min(h.pct * 2, 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground w-10 text-right shrink-0">{h.pct}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   );
