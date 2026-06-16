@@ -226,11 +226,13 @@ export default function StockDetailDrawer({
   exchangeRate = 1370,
 }: StockDetailDrawerProps) {
   const [etfHoldings, setEtfHoldings] = useState<ETFHolding[] | null>(null);
+  const [constituentChange, setConstituentChange] = useState<Record<string, number | null>>({});
   const [selectedConstituent, setSelectedConstituent] = useState<ETFHolding | null>(null);
   const [constituentOpen, setConstituentOpen] = useState(false);
 
   useEffect(() => {
     setEtfHoldings(null);
+    setConstituentChange({});
   }, [holding?.종목번호]);
 
   useEffect(() => {
@@ -240,6 +242,27 @@ export default function StockDetailDrawer({
       .then((d) => { if (d?.holdings?.length) setEtfHoldings(d.holdings); })
       .catch(() => {});
   }, [open, holding?.종목번호]);
+
+  // ETF 구성 종목의 오늘 등락률 (기존 price/price-us 시세 API 재사용)
+  useEffect(() => {
+    if (!etfHoldings?.length || !holding) return;
+    const symbols = [...new Set(etfHoldings.map((h) => h.symbol).filter(Boolean))];
+    if (!symbols.length) return;
+    const url = holding.단위 === 'USD'
+      ? `/api/price-us?tickers=${symbols.join(',')}`
+      : `/api/price?codes=${symbols.join(',')}`;
+    fetch(url)
+      .then((r) => r.json())
+      .then((data: Record<string, { currentPrice: number; prevClose: number } | null>) => {
+        const map: Record<string, number | null> = {};
+        for (const sym of symbols) {
+          const d = data[sym];
+          map[sym] = d?.prevClose ? ((d.currentPrice - d.prevClose) / d.prevClose) * 100 : null;
+        }
+        setConstituentChange(map);
+      })
+      .catch(() => {});
+  }, [etfHoldings, holding?.단위]);
 
   if (!holding) return null;
 
@@ -375,40 +398,47 @@ export default function StockDetailDrawer({
             <div className="mt-6">
               <h3 className="text-sm font-semibold mb-3">ETF 구성 종목 (상위 {etfHoldings.length}개)</h3>
               <div className="space-y-1">
-                {etfHoldings.map((h) => (
-                  <div
-                    key={h.symbol || h.name}
-                    className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-1 -mx-1.5 transition-colors group"
-                    onClick={() => {
-                      setSelectedConstituent(h);
-                      setConstituentOpen(true);
-                    }}
-                  >
-                    <div className="w-24 shrink-0">
-                      <div className="text-xs font-medium truncate">{h.name || h.symbol}</div>
-                      {h.name && h.symbol && <div className="text-[10px] text-muted-foreground">{h.symbol}</div>}
-                    </div>
-                    {h.pct !== null ? (
-                      <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className="h-full bg-foreground/40 rounded-full"
-                          style={{ width: `${Math.min(h.pct * 2, 100)}%` }}
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex-1" />
-                    )}
-                    <span className="text-xs text-muted-foreground w-10 text-right shrink-0">
-                      {h.pct !== null ? `${h.pct}%` : '-'}
-                    </span>
-                    <svg
-                      className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 transition-colors"
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                {etfHoldings.map((h) => {
+                  const chg = constituentChange[h.symbol];
+                  const chgPositive = chg != null && chg >= 0;
+                  return (
+                    <div
+                      key={h.symbol || h.name}
+                      className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-1 -mx-1.5 transition-colors group"
+                      onClick={() => {
+                        setSelectedConstituent(h);
+                        setConstituentOpen(true);
+                      }}
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                ))}
+                      <div className="w-24 shrink-0">
+                        <div className="text-xs font-medium truncate">{h.name || h.symbol}</div>
+                        {h.name && h.symbol && <div className="text-[10px] text-muted-foreground">{h.symbol}</div>}
+                      </div>
+                      {h.pct !== null ? (
+                        <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="h-full bg-foreground/40 rounded-full"
+                            style={{ width: `${Math.min(h.pct * 2, 100)}%` }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex-1" />
+                      )}
+                      <span className="text-xs text-muted-foreground w-10 text-right shrink-0">
+                        {h.pct !== null ? `${h.pct}%` : '-'}
+                      </span>
+                      <span className={`text-xs w-12 text-right shrink-0 ${chg == null ? 'text-muted-foreground/50' : chgPositive ? 'text-green-500' : 'text-red-500'}`}>
+                        {chg != null ? `${chgPositive ? '+' : ''}${chg.toFixed(2)}%` : '-'}
+                      </span>
+                      <svg
+                        className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 transition-colors"
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
