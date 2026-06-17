@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { HoldingWithMeta, SectorDef } from '@/types/portfolio';
 import { formatRate } from '@/lib/format';
 
-type SortKey = 'sector' | 'evalAmount' | 'todayGainRate' | 'gainRate';
+type SortKey = 'sector' | 'evalAmount' | 'gainAmount' | 'todayGainRate' | 'gainRate';
 type SortDir = 'desc' | 'asc';
 
 interface Props {
@@ -85,6 +85,9 @@ export default function SectorReturns({ holdings, sectorDefs, selectedSector, on
         <button className={`text-xs text-muted-foreground w-16 text-right shrink-0 ${thClass}`} onClick={() => handleSort('evalAmount')}>
           평가금액{arrow('evalAmount')}
         </button>
+        <button className={`text-xs text-muted-foreground w-16 text-right shrink-0 ${thClass}`} onClick={() => handleSort('gainAmount')}>
+          평가이익{arrow('gainAmount')}
+        </button>
       </div>
       <div className="divide-y divide-border">
         {sectorData.map((s) => {
@@ -107,6 +110,9 @@ export default function SectorReturns({ holdings, sectorDefs, selectedSector, on
               </span>
               <span className="text-xs text-muted-foreground w-16 text-right shrink-0">
                 ₩{Math.round(s.evalAmount / 10000).toLocaleString('ko-KR')}만
+              </span>
+              <span className={`text-xs w-16 text-right shrink-0 ${s.gainAmount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                {s.gainAmount >= 0 ? '+' : '-'}₩{Math.abs(Math.round(s.gainAmount / 10000)).toLocaleString('ko-KR')}만
               </span>
             </button>
           );
