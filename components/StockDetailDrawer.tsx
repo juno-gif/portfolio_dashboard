@@ -295,7 +295,16 @@ export default function StockDetailDrawer({
         <SheetContent className="w-[400px] sm:w-[480px] overflow-y-auto">
           <SheetHeader className="mb-6">
             <SheetTitle className="flex items-center gap-2 flex-wrap">
-              <span>{holding.종목명}</span>
+              <a
+                href={isUSD
+                  ? `https://finance.yahoo.com/quote/${holding.종목번호}`
+                  : `https://finance.naver.com/item/main.naver?code=${holding.종목번호}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline underline-offset-2 cursor-pointer"
+              >
+                {holding.종목명}
+              </a>
               <span className="text-sm text-muted-foreground font-normal">
                 {holding.종목번호}
               </span>
