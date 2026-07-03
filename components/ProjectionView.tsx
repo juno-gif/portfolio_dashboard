@@ -18,6 +18,7 @@ const LS_KEY = 'projection_params';
 
 interface SavedParams {
   currentAge: string;
+  birthYear?: number; // currentAge 대신 이 값으로 나이를 동적 계산 (연도 변경 대응)
   annualReturn: string;
   inflationRate: string;
   events: CashFlowEvent[];
@@ -73,7 +74,12 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
       }
 
       if (saved) {
-        setCurrentAge(saved.currentAge ?? '');
+        // birthYear가 있으면 현재 연도에서 역산해 나이를 항상 최신으로 유지
+        const currentYear = new Date().getFullYear();
+        const ageToSet = saved.birthYear
+          ? String(currentYear - saved.birthYear)
+          : (saved.currentAge ?? '');
+        setCurrentAge(ageToSet);
         setAnnualReturn(saved.annualReturn ?? '7');
         setInflationRate(saved.inflationRate ?? '2.5');
         setEvents(saved.events ?? []);
@@ -89,7 +95,9 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSaveStatus('saving');
     saveTimerRef.current = setTimeout(async () => {
-      const payload: SavedParams = { currentAge, annualReturn, inflationRate, events };
+      const parsedAge = parseInt(currentAge);
+      const birthYear = !isNaN(parsedAge) ? new Date().getFullYear() - parsedAge : undefined;
+      const payload: SavedParams = { currentAge, birthYear, annualReturn, inflationRate, events };
       try {
         // 토큰별 키로 저장 (토큰 없으면 localStorage 스킵)
         if (token) {
