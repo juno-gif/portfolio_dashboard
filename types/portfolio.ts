@@ -98,8 +98,8 @@ export interface OneTimeEvent {
 
 export interface RecurringEvent {
   type: 'recurring';
-  startAge: number;
-  endAge?: number;          // 없으면 예측 기간 끝까지
+  startYear: number;
+  endYear?: number;          // 없으면 예측 기간 끝까지
   monthlyAmount: number;    // 만원/월, 음수 허용
   label: string;
 }
@@ -108,7 +108,7 @@ export type CashFlowEvent = OneTimeEvent | RecurringEvent;
 
 export interface ProjectionParams {
   totalEval: number;          // 현재 자산 (원)
-  currentAge: number;
+  birthYear: number;          // 출생년도 (나이 대신 사용, 연도 변경 자동 대응)
   annualReturn: number;       // 0.07 = 7%
   events: CashFlowEvent[];
 }

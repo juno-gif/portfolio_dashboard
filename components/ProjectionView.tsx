@@ -16,9 +16,10 @@ import {
 
 const LS_KEY = 'projection_params';
 
+// 저장 포맷 — 하위 호환: currentAge/birthYear(나이 기반) + startAge(반복 이벤트 구버전)
 interface SavedParams {
-  currentAge: string;
-  birthYear?: number; // currentAge 대신 이 값으로 나이를 동적 계산 (연도 변경 대응)
+  birthYear?: number;
+  currentAge?: string;        // 구버전 호환
   annualReturn: string;
   inflationRate: string;
   events: CashFlowEvent[];
@@ -38,7 +39,7 @@ function fmtSigned(v: number): string {
 }
 
 export default function ProjectionView({ totalEval, token }: ProjectionViewProps) {
-  const [currentAge, setCurrentAge] = useState<string>('');
+  const [birthYear, setBirthYear] = useState<string>('');
   const [annualReturn, setAnnualReturn] = useState<string>('7');
   const [inflationRate, setInflationRate] = useState<string>('2.5');
   const [events, setEvents] = useState<CashFlowEvent[]>([]);
@@ -46,7 +47,7 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLoadedRef = useRef(false);
 
-  // 마운트 시 저장된 값 복원 (KV → localStorage 순)
+  // 마운트 시 저장된 값 복원 + 구버전 자동 마이그레이션
   useEffect(() => {
     (async () => {
       let saved: SavedParams | null = null;
@@ -54,15 +55,10 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
       if (token) {
         try {
           const res = await fetch(`/api/projection?token=${token}`);
-          if (res.ok) {
-            saved = await res.json();
-          }
-        } catch {
-          // KV 실패 시 localStorage로 fallback
-        }
+          if (res.ok) saved = await res.json();
+        } catch { /* localStorage fallback */ }
       }
 
-      // localStorage는 토큰이 있는 경우(KV fallback)에만 사용, 토큰별 키로 분리
       if (!saved && token) {
         const lsKey = `${LS_KEY}_${token}`;
         try {
@@ -74,15 +70,36 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
       }
 
       if (saved) {
-        // birthYear가 있으면 현재 연도에서 역산해 나이를 항상 최신으로 유지
         const currentYear = new Date().getFullYear();
-        const ageToSet = saved.birthYear
-          ? String(currentYear - saved.birthYear)
-          : (saved.currentAge ?? '');
-        setCurrentAge(ageToSet);
+
+        // 출생년도 결정: birthYear 저장값 우선, 없으면 currentAge에서 역산
+        const resolvedBirthYear =
+          saved.birthYear ??
+          (saved.currentAge ? currentYear - parseInt(saved.currentAge) : undefined);
+
+        setBirthYear(resolvedBirthYear ? String(resolvedBirthYear) : '');
         setAnnualReturn(saved.annualReturn ?? '7');
         setInflationRate(saved.inflationRate ?? '2.5');
-        setEvents(saved.events ?? []);
+
+        // 반복 이벤트 구버전(startAge/endAge) → 신버전(startYear/endYear) 자동 변환
+        const migratedEvents: CashFlowEvent[] = (saved.events ?? []).map((ev) => {
+          if (ev.type === 'recurring') {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const legacy = ev as any;
+            if ('startAge' in legacy && resolvedBirthYear) {
+              return {
+                type: 'recurring' as const,
+                startYear: resolvedBirthYear + legacy.startAge,
+                endYear: legacy.endAge != null ? resolvedBirthYear + legacy.endAge : undefined,
+                monthlyAmount: ev.monthlyAmount,
+                label: ev.label,
+              };
+            }
+          }
+          return ev;
+        });
+
+        setEvents(migratedEvents);
       }
       isLoadedRef.current = true;
     })();
@@ -95,11 +112,14 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSaveStatus('saving');
     saveTimerRef.current = setTimeout(async () => {
-      const parsedAge = parseInt(currentAge);
-      const birthYear = !isNaN(parsedAge) ? new Date().getFullYear() - parsedAge : undefined;
-      const payload: SavedParams = { currentAge, birthYear, annualReturn, inflationRate, events };
+      const parsedBirthYear = parseInt(birthYear);
+      const payload: SavedParams = {
+        birthYear: !isNaN(parsedBirthYear) ? parsedBirthYear : undefined,
+        annualReturn,
+        inflationRate,
+        events,
+      };
       try {
-        // 토큰별 키로 저장 (토큰 없으면 localStorage 스킵)
         if (token) {
           localStorage.setItem(`${LS_KEY}_${token}`, JSON.stringify(payload));
           await fetch(`/api/projection?token=${token}`, {
@@ -113,20 +133,20 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
         setSaveStatus('idle');
       }
     }, 1500);
-  }, [currentAge, annualReturn, inflationRate, events, token]);
+  }, [birthYear, annualReturn, inflationRate, events, token]);
 
   useEffect(() => {
     triggerSave();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentAge, annualReturn, inflationRate, events]);
+  }, [birthYear, annualReturn, inflationRate, events]);
 
   // 이벤트 추가 폼 상태
   const [newType, setNewType] = useState<'one-time' | 'recurring'>('one-time');
   const [newYear, setNewYear] = useState<string>('');
   const [newAmount, setNewAmount] = useState<string>('');
   const [newLabel, setNewLabel] = useState<string>('');
-  const [newStartAge, setNewStartAge] = useState<string>('');
-  const [newEndAge, setNewEndAge] = useState<string>('');
+  const [newStartYear, setNewStartYear] = useState<string>('');
+  const [newEndYear, setNewEndYear] = useState<string>('');
   const [newMonthly, setNewMonthly] = useState<string>('');
   const [formError, setFormError] = useState<string>('');
 
@@ -136,19 +156,21 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
   const [editYear, setEditYear] = useState('');
   const [editAmount, setEditAmount] = useState('');
   const [editLabel, setEditLabel] = useState('');
-  const [editStartAge, setEditStartAge] = useState('');
-  const [editEndAge, setEditEndAge] = useState('');
+  const [editStartYear, setEditStartYear] = useState('');
+  const [editEndYear, setEditEndYear] = useState('');
   const [editMonthly, setEditMonthly] = useState('');
   const [editError, setEditError] = useState('');
 
   const selectId = useId();
 
+  const currentYear = new Date().getFullYear();
+
   const params: ProjectionParams | null = useMemo(() => {
-    const age = parseInt(currentAge);
+    const by = parseInt(birthYear);
     const r = parseFloat(annualReturn) / 100;
-    if (!age || age <= 0 || isNaN(r)) return null;
-    return { totalEval, currentAge: age, annualReturn: r, events };
-  }, [totalEval, currentAge, annualReturn, events]);
+    if (!by || by < 1900 || by > currentYear || isNaN(r)) return null;
+    return { totalEval, birthYear: by, annualReturn: r, events };
+  }, [totalEval, birthYear, annualReturn, events, currentYear]);
 
   const rows = useMemo(() => (params ? calcProjection(params) : []), [params]);
 
@@ -160,22 +182,19 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
       if (isNaN(year) || year < 2000) { setFormError('연도를 올바르게 입력해주세요 (예: 2041)'); return; }
       if (isNaN(amount)) { setFormError('금액을 입력해주세요 (예: 40000 또는 -8000)'); return; }
       if (!newLabel.trim()) { setFormError('설명을 입력해주세요'); return; }
-      setEvents((prev) => [
-        ...prev,
-        { type: 'one-time', year, amount, label: newLabel.trim() },
-      ]);
+      setEvents((prev) => [...prev, { type: 'one-time', year, amount, label: newLabel.trim() }]);
     } else {
-      const startAge = parseInt(newStartAge);
+      const startYear = parseInt(newStartYear);
       const monthly = parseFloat(newMonthly);
-      if (isNaN(startAge) || startAge <= 0) { setFormError('시작 나이를 입력해주세요 (예: 65)'); return; }
+      if (isNaN(startYear) || startYear < 2000) { setFormError('시작 연도를 올바르게 입력해주세요 (예: 2050)'); return; }
       if (isNaN(monthly)) { setFormError('월 금액을 입력해주세요 (예: 150 또는 -300)'); return; }
       if (!newLabel.trim()) { setFormError('설명을 입력해주세요'); return; }
       setEvents((prev) => [
         ...prev,
         {
           type: 'recurring',
-          startAge,
-          endAge: newEndAge ? parseInt(newEndAge) : undefined,
+          startYear,
+          endYear: newEndYear ? parseInt(newEndYear) : undefined,
           monthlyAmount: monthly,
           label: newLabel.trim(),
         },
@@ -184,8 +203,8 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
     setNewYear('');
     setNewAmount('');
     setNewLabel('');
-    setNewStartAge('');
-    setNewEndAge('');
+    setNewStartYear('');
+    setNewEndYear('');
     setNewMonthly('');
   }
 
@@ -203,8 +222,8 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
       setEditAmount(String(ev.amount));
       setEditLabel(ev.label);
     } else {
-      setEditStartAge(String(ev.startAge));
-      setEditEndAge(ev.endAge != null ? String(ev.endAge) : '');
+      setEditStartYear(String(ev.startYear));
+      setEditEndYear(ev.endYear != null ? String(ev.endYear) : '');
       setEditMonthly(String(ev.monthlyAmount));
       setEditLabel(ev.label);
     }
@@ -223,16 +242,16 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
         i === index ? { type: 'one-time', year, amount, label: editLabel.trim() } : ev
       ));
     } else {
-      const startAge = parseInt(editStartAge);
+      const startYear = parseInt(editStartYear);
       const monthly = parseFloat(editMonthly);
-      if (isNaN(startAge) || startAge <= 0) { setEditError('시작 나이를 입력해주세요'); return; }
+      if (isNaN(startYear) || startYear < 2000) { setEditError('시작 연도를 올바르게 입력해주세요'); return; }
       if (isNaN(monthly)) { setEditError('월 금액을 입력해주세요'); return; }
       if (!editLabel.trim()) { setEditError('설명을 입력해주세요'); return; }
       setEvents((prev) => prev.map((ev, i) =>
         i === index ? {
           type: 'recurring',
-          startAge,
-          endAge: editEndAge ? parseInt(editEndAge) : undefined,
+          startYear,
+          endYear: editEndYear ? parseInt(editEndYear) : undefined,
           monthlyAmount: monthly,
           label: editLabel.trim(),
         } : ev
@@ -265,15 +284,15 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
               </div>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">현재 나이 (세)</label>
+              <label className="text-xs text-muted-foreground mb-1 block">출생년도</label>
               <input
                 type="number"
                 className={inputCls}
-                value={currentAge}
-                onChange={(e) => setCurrentAge(e.target.value)}
-                placeholder="예: 40"
-                min={1}
-                max={100}
+                value={birthYear}
+                onChange={(e) => setBirthYear(e.target.value)}
+                placeholder="예: 1985"
+                min={1900}
+                max={currentYear}
               />
             </div>
             <div>
@@ -313,7 +332,6 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
             <div className="space-y-1.5">
               {events.map((ev, i) =>
                 editingIndex === i ? (
-                  // 인라인 편집 폼
                   <div key={i} className="border border-primary/40 rounded-md p-3 space-y-2 bg-muted/50 text-xs">
                     <div className="flex gap-2 items-center">
                       <span className="text-muted-foreground shrink-0">유형</span>
@@ -344,12 +362,12 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
                     ) : (
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         <div>
-                          <label className="text-muted-foreground mb-1 block">시작 나이</label>
-                          <input type="number" className={inputCls} value={editStartAge} onChange={(e) => setEditStartAge(e.target.value)} placeholder="65" />
+                          <label className="text-muted-foreground mb-1 block">시작 연도</label>
+                          <input type="number" className={inputCls} value={editStartYear} onChange={(e) => setEditStartYear(e.target.value)} placeholder="2050" />
                         </div>
                         <div>
-                          <label className="text-muted-foreground mb-1 block">종료 나이</label>
-                          <input type="number" className={inputCls} value={editEndAge} onChange={(e) => setEditEndAge(e.target.value)} placeholder="없으면 끝까지" />
+                          <label className="text-muted-foreground mb-1 block">종료 연도</label>
+                          <input type="number" className={inputCls} value={editEndYear} onChange={(e) => setEditEndYear(e.target.value)} placeholder="없으면 끝까지" />
                         </div>
                         <div>
                           <label className="text-muted-foreground mb-1 block">월 금액 (만원)</label>
@@ -368,7 +386,6 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
                     </div>
                   </div>
                 ) : (
-                  // 요약 표시 행
                   <div key={i} className="flex items-center justify-between text-xs bg-muted rounded-md px-3 py-2">
                     <div className="flex items-center gap-3 flex-wrap">
                       <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium">
@@ -377,7 +394,7 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
                       {ev.type === 'one-time' ? (
                         <span>{ev.year}년</span>
                       ) : (
-                        <span>{ev.startAge}세{ev.endAge ? `~${ev.endAge}세` : '~'}</span>
+                        <span>{ev.startYear}년{ev.endYear ? `~${ev.endYear}년` : '~'}</span>
                       )}
                       <span className="font-medium">{ev.label}</span>
                       <span className={(ev.type === 'one-time' ? ev.amount : ev.monthlyAmount) >= 0 ? 'text-green-500' : 'text-red-500'}>
@@ -413,93 +430,46 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">연도</label>
-                  <input
-                    type="number"
-                    className={inputCls}
-                    value={newYear}
-                    onChange={(e) => setNewYear(e.target.value)}
-                    placeholder="2041"
-                  />
+                  <input type="number" className={inputCls} value={newYear} onChange={(e) => setNewYear(e.target.value)} placeholder="2041" />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">금액 (만원)</label>
-                  <input
-                    type="number"
-                    className={inputCls}
-                    value={newAmount}
-                    onChange={(e) => setNewAmount(e.target.value)}
-                    placeholder="+40000 / -8000"
-                  />
+                  <input type="number" className={inputCls} value={newAmount} onChange={(e) => setNewAmount(e.target.value)} placeholder="+40000 / -8000" />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">설명</label>
-                  <input
-                    type="text"
-                    className={inputCls}
-                    value={newLabel}
-                    onChange={(e) => setNewLabel(e.target.value)}
-                    placeholder="퇴직금"
-                  />
+                  <input type="text" className={inputCls} value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="퇴직금" />
                 </div>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">시작 나이</label>
-                  <input
-                    type="number"
-                    className={inputCls}
-                    value={newStartAge}
-                    onChange={(e) => setNewStartAge(e.target.value)}
-                    placeholder="65"
-                  />
+                  <label className="text-xs text-muted-foreground mb-1 block">시작 연도</label>
+                  <input type="number" className={inputCls} value={newStartYear} onChange={(e) => setNewStartYear(e.target.value)} placeholder="2050" />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">종료 나이 (선택)</label>
-                  <input
-                    type="number"
-                    className={inputCls}
-                    value={newEndAge}
-                    onChange={(e) => setNewEndAge(e.target.value)}
-                    placeholder="없으면 끝까지"
-                  />
+                  <label className="text-xs text-muted-foreground mb-1 block">종료 연도 (선택)</label>
+                  <input type="number" className={inputCls} value={newEndYear} onChange={(e) => setNewEndYear(e.target.value)} placeholder="없으면 끝까지" />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">
                     월 금액 (만원)
                     <span className="ml-1 text-[10px] text-muted-foreground/60">현재가치 기준</span>
                   </label>
-                  <input
-                    type="number"
-                    className={inputCls}
-                    value={newMonthly}
-                    onChange={(e) => setNewMonthly(e.target.value)}
-                    placeholder="+150 / -300"
-                  />
+                  <input type="number" className={inputCls} value={newMonthly} onChange={(e) => setNewMonthly(e.target.value)} placeholder="+150 / -300" />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">설명</label>
-                  <input
-                    type="text"
-                    className={inputCls}
-                    value={newLabel}
-                    onChange={(e) => setNewLabel(e.target.value)}
-                    placeholder="국민연금"
-                  />
+                  <input type="text" className={inputCls} value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="국민연금" />
                 </div>
               </div>
             )}
 
             <div className="flex items-center gap-3">
-              <button
-                onClick={addEvent}
-                className="text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-              >
+              <button onClick={addEvent} className="text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
                 + 추가
               </button>
-              {formError && (
-                <span className="text-xs text-red-500">{formError}</span>
-              )}
+              {formError && <span className="text-xs text-red-500">{formError}</span>}
             </div>
           </div>
         </CardContent>
@@ -508,7 +478,6 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
       {/* 결과 영역 */}
       {rows.length > 0 ? (
         <>
-          {/* 바 차트 */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">연도별 자산 추이</CardTitle>
@@ -521,7 +490,6 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
             </CardContent>
           </Card>
 
-          {/* 테이블 */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">연도별 상세 (단위: 만원)</CardTitle>
@@ -542,9 +510,7 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
                         <TableHead className="text-xs text-right">증감</TableHead>
                         <TableHead className="text-xs text-right">증감(월)</TableHead>
                         {validInflation && (
-                          <TableHead className="text-xs text-right text-muted-foreground">
-                            현재가치
-                          </TableHead>
+                          <TableHead className="text-xs text-right text-muted-foreground">현재가치</TableHead>
                         )}
                       </TableRow>
                     </TableHeader>
@@ -586,7 +552,7 @@ export default function ProjectionView({ totalEval, token }: ProjectionViewProps
         </>
       ) : (
         <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-          현재 나이와 수익률을 입력하면 예측 결과가 표시됩니다.
+          출생년도와 수익률을 입력하면 예측 결과가 표시됩니다.
         </div>
       )}
     </div>

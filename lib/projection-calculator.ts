@@ -6,13 +6,9 @@ import {
 
 const PROJECTION_YEARS = 50;
 
-/**
- * 특정 연도에 발생하는 이벤트 현금흐름 합계 계산 (만원)
- */
 function getEventCashFlow(
   events: CashFlowEvent[],
   year: number,
-  age: number
 ): { total: number; hasEvent: boolean } {
   let total = 0;
   let hasEvent = false;
@@ -23,8 +19,8 @@ function getEventCashFlow(
       hasEvent = true;
     } else if (event.type === 'recurring') {
       const inRange =
-        age >= event.startAge &&
-        (event.endAge === undefined || age <= event.endAge);
+        year >= event.startYear &&
+        (event.endYear === undefined || year <= event.endYear);
       if (inRange) {
         total += event.monthlyAmount * 12;
         hasEvent = true;
@@ -35,9 +31,6 @@ function getEventCashFlow(
   return { total, hasEvent };
 }
 
-/**
- * 올해 남은 기간 비율 계산 (오늘 ~ 12/31)
- */
 function getRemainingYearFraction(): number {
   const today = new Date();
   const year = today.getFullYear();
@@ -57,11 +50,10 @@ function getRemainingYearFraction(): number {
  *   증감      = 기말[yr] - 기말[yr-1]
  */
 export function calcProjection(params: ProjectionParams): ProjectionYear[] {
-  const { totalEval, currentAge, annualReturn: r, events } = params;
+  const { totalEval, birthYear, annualReturn: r, events } = params;
 
   const currentYear = new Date().getFullYear();
   const remainingFraction = getRemainingYearFraction();
-  // 현재 자산을 만원 단위로 변환
   const initialAssetsMan = totalEval / 10000;
 
   const rows: ProjectionYear[] = [];
@@ -69,12 +61,11 @@ export function calcProjection(params: ProjectionParams): ProjectionYear[] {
 
   for (let i = 0; i < PROJECTION_YEARS; i++) {
     const year = currentYear + i;
-    const age = currentAge + i;
+    const age = year - birthYear;
 
-    // 첫 해는 잔여기간 비율, 이후는 전체 연도 수익률
     const effectiveR = i === 0 ? r * remainingFraction : r;
     const beginAssets = i === 0 ? prevEndAssets : prevEndAssets * (1 + r);
-    const { total: eventCashFlow, hasEvent } = getEventCashFlow(events, year, age);
+    const { total: eventCashFlow, hasEvent } = getEventCashFlow(events, year);
     const inOut = eventCashFlow;
     const endAssets = beginAssets * (i === 0 ? 1 + effectiveR : 1) + inOut * (1 + effectiveR * 0.5);
     const gain = endAssets - prevEndAssets;
