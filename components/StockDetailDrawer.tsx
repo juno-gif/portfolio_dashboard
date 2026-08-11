@@ -332,32 +332,30 @@ export default function StockDetailDrawer({
       <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
         <SheetContent className="w-[400px] sm:w-[480px] overflow-y-auto">
           <SheetHeader className="mb-4">
-            <div className="flex items-start justify-between gap-3">
-              <SheetTitle className="flex items-center gap-2 flex-wrap">
-                <a
-                  href={isUSD
-                    ? `https://finance.yahoo.com/quote/${holding.종목번호}`
-                    : `https://finance.naver.com/item/main.naver?code=${holding.종목번호}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:underline underline-offset-2 cursor-pointer"
-                >
-                  {holding.종목명}
-                </a>
-                <span className="text-sm text-muted-foreground font-normal">
-                  {holding.종목번호}
-                </span>
-                <Badge className="text-xs">{holding.sector}</Badge>
-              </SheetTitle>
-              {onEdit && !editMode && (
-                <button
-                  onClick={startEdit}
-                  className="shrink-0 text-xs px-2.5 py-1 rounded-md border hover:bg-muted transition-colors mt-0.5"
-                >
-                  수정
-                </button>
-              )}
-            </div>
+            <SheetTitle className="flex items-center gap-2 flex-wrap pr-8">
+              <a
+                href={isUSD
+                  ? `https://finance.yahoo.com/quote/${holding.종목번호}`
+                  : `https://finance.naver.com/item/main.naver?code=${holding.종목번호}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline underline-offset-2 cursor-pointer"
+              >
+                {holding.종목명}
+              </a>
+              <span className="text-sm text-muted-foreground font-normal">
+                {holding.종목번호}
+              </span>
+              <Badge className="text-xs">{holding.sector}</Badge>
+            </SheetTitle>
+            {onEdit && !editMode && (
+              <button
+                onClick={startEdit}
+                className="mt-2 text-xs px-2.5 py-1 rounded-md border hover:bg-muted transition-colors w-fit"
+              >
+                수정
+              </button>
+            )}
           </SheetHeader>
 
           {/* 수정 모드 */}
