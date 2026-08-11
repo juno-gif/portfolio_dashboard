@@ -26,6 +26,7 @@ import SectorManager from '@/components/SectorManager';
 import MarketView from '@/components/MarketView';
 import HoldingsHeatmap from '@/components/HoldingsHeatmap';
 import DividendView from '@/components/DividendView';
+import AddHoldingModal from '@/components/AddHoldingModal';
 
 const MISC_LS_KEY = 'misc_assets';
 const SECTOR_LS_KEY = 'sector_config';
@@ -44,6 +45,7 @@ export default function Home() {
   const [copyDone, setCopyDone] = useState(false);
   const [miscAssets, setMiscAssets] = useState<MiscAsset[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [addModalOpen, setAddModalOpen] = useState(false);
   const [selectedSector, setSelectedSector] = useState<string | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [sectorDefs, setSectorDefs] = useState<SectorDef[]>(DEFAULT_SECTORS);
@@ -83,6 +85,61 @@ export default function Home() {
   const handleRefresh = useCallback(() => {
     if (rawHoldings.length > 0) loadPrices(rawHoldings, sectorOverrides);
   }, [rawHoldings, loadPrices, sectorOverrides]);
+
+  const saveHoldings = useCallback(async (holdings: RawHolding[]) => {
+    const q = (s: string) => `"${s.replace(/"/g, '""')}"`;
+    const header = '계좌,종목명,종목번호,수량,평균단가,단위';
+    const rows = holdings.map(
+      (h) => `${q(h.계좌)},${q(h.종목명)},${q(h.종목번호)},${h.수량},${h.평균단가},${h.단위}`
+    );
+    const csv = [header, ...rows].join('\n');
+    try {
+      const url = portfolioToken ? `/api/portfolio?token=${portfolioToken}` : '/api/portfolio';
+      const res = await fetch(url, { method: 'POST', body: csv });
+      if (res.ok) {
+        const { token } = await res.json();
+        if (token !== portfolioToken) {
+          setPortfolioToken(token);
+          window.history.pushState({}, '', `${window.location.pathname}?token=${token}`);
+        }
+      }
+    } catch { /* silent */ }
+  }, [portfolioToken]);
+
+  const saveAndReload = useCallback(async (updated: RawHolding[]) => {
+    setRawHoldings(updated);
+    await saveHoldings(updated);
+    await loadPrices(updated, sectorOverrides);
+  }, [saveHoldings, loadPrices, sectorOverrides]);
+
+  const handleAddHolding = useCallback(async (newHolding: RawHolding) => {
+    const updated = [...rawHoldings];
+    const existingIdx = updated.findIndex(
+      (h) => h.종목번호 === newHolding.종목번호 && h.계좌 === newHolding.계좌
+    );
+    if (existingIdx >= 0) {
+      const existing = updated[existingIdx];
+      const totalQty = existing.수량 + newHolding.수량;
+      const weightedAvg =
+        (existing.평균단가 * existing.수량 + newHolding.평균단가 * newHolding.수량) / totalQty;
+      updated[existingIdx] = { ...existing, 수량: totalQty, 평균단가: weightedAvg };
+    } else {
+      updated.push(newHolding);
+    }
+    setAddModalOpen(false);
+    await saveAndReload(updated);
+  }, [rawHoldings, saveAndReload]);
+
+  const handleEditHolding = useCallback(async (entries: RawHolding[]) => {
+    if (!selectedHolding) return;
+    const code = selectedHolding.종목번호;
+    const updated = [
+      ...rawHoldings.filter((h) => h.종목번호 !== code),
+      ...entries,
+    ];
+    setDrawerOpen(false);
+    await saveAndReload(updated);
+  }, [rawHoldings, selectedHolding, saveAndReload]);
 
   // 기타 자산 로드: KV(토큰 있을 때) → localStorage 순
   const loadMiscAssets = useCallback(async (token: string | null) => {
@@ -292,6 +349,14 @@ export default function Home() {
   const allConsolidated = useMemo(
     () => consolidateHoldings(holdingsWithMeta),
     [holdingsWithMeta]
+  );
+  const accounts = useMemo(
+    () => accountSummaries.map((a) => a.account),
+    [accountSummaries]
+  );
+  const selectedHoldingRawEntries = useMemo(
+    () => selectedHolding ? rawHoldings.filter((h) => h.종목번호 === selectedHolding.종목번호) : [],
+    [rawHoldings, selectedHolding]
   );
 
   const handleSelectHolding = (h: ConsolidatedHolding) => {
@@ -505,15 +570,23 @@ export default function Home() {
             <div className="bg-card border rounded-xl p-4 overflow-auto xl:col-span-3">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold">종목별 수익률</h2>
-                {selectedSector && (
+                <div className="flex items-center gap-2">
+                  {selectedSector && (
+                    <button
+                      onClick={() => setSelectedSector(null)}
+                      className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full hover:bg-muted/70 transition-colors"
+                    >
+                      <span>{selectedSector}</span>
+                      <span className="text-muted-foreground">✕</span>
+                    </button>
+                  )}
                   <button
-                    onClick={() => setSelectedSector(null)}
-                    className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full hover:bg-muted/70 transition-colors"
+                    onClick={() => setAddModalOpen(true)}
+                    className="text-xs px-2.5 py-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                   >
-                    <span>{selectedSector}</span>
-                    <span className="text-muted-foreground">✕</span>
+                    + 신규등록
                   </button>
-                )}
+                </div>
               </div>
               <StockList
                 holdings={selectedSector ? sectorHoldings : consolidated}
@@ -624,6 +697,16 @@ export default function Home() {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         exchangeRate={exchangeRate}
+        rawEntries={selectedHoldingRawEntries}
+        onEdit={handleEditHolding}
+      />
+
+      {/* 신규 종목 등록 모달 */}
+      <AddHoldingModal
+        open={addModalOpen}
+        onClose={() => setAddModalOpen(false)}
+        onAdd={handleAddHolding}
+        accounts={accounts}
       />
     </div>
   );

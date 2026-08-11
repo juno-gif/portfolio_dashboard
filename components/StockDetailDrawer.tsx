@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
-import { ConsolidatedHolding } from '@/types/portfolio';
+import { ConsolidatedHolding, RawHolding } from '@/types/portfolio';
 import {
   Sheet,
   SheetContent,
@@ -217,6 +217,8 @@ interface StockDetailDrawerProps {
   open: boolean;
   onClose: () => void;
   exchangeRate?: number;
+  rawEntries?: RawHolding[];
+  onEdit?: (entries: RawHolding[]) => void;
 }
 
 export default function StockDetailDrawer({
@@ -224,15 +226,23 @@ export default function StockDetailDrawer({
   open,
   onClose,
   exchangeRate = 1370,
+  rawEntries,
+  onEdit,
 }: StockDetailDrawerProps) {
   const [etfHoldings, setEtfHoldings] = useState<ETFHolding[] | null>(null);
   const [constituentChange, setConstituentChange] = useState<Record<string, number | null>>({});
   const [selectedConstituent, setSelectedConstituent] = useState<ETFHolding | null>(null);
   const [constituentOpen, setConstituentOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editRows, setEditRows] = useState<{ account: string; qty: string; avgCost: string }[]>([]);
+  const [editSaveError, setEditSaveError] = useState('');
 
   useEffect(() => {
     setEtfHoldings(null);
     setConstituentChange({});
+    setEditMode(false);
+    setEditRows([]);
+    setEditSaveError('');
   }, [holding?.종목번호]);
 
   useEffect(() => {
@@ -267,6 +277,34 @@ export default function StockDetailDrawer({
   if (!holding) return null;
 
   const isUSD = holding.단위 === 'USD';
+
+  function startEdit() {
+    if (!rawEntries?.length) return;
+    setEditRows(rawEntries.map((e) => ({
+      account: e.계좌,
+      qty: String(e.수량),
+      avgCost: String(e.평균단가),
+    })));
+    setEditSaveError('');
+    setEditMode(true);
+  }
+
+  function saveEdit() {
+    setEditSaveError('');
+    const updated: RawHolding[] = [];
+    for (const row of editRows) {
+      const qty = parseFloat(row.qty);
+      const avgCost = parseFloat(row.avgCost);
+      if (isNaN(qty) || qty < 0) { setEditSaveError('수량을 올바르게 입력해주세요'); return; }
+      if (isNaN(avgCost) || avgCost <= 0) { setEditSaveError('평단가를 올바르게 입력해주세요'); return; }
+      if (qty > 0) {
+        const original = rawEntries?.find((e) => e.계좌 === row.account);
+        if (original) updated.push({ ...original, 수량: qty, 평균단가: avgCost });
+      }
+    }
+    onEdit?.(updated);
+    setEditMode(false);
+  }
   const todayPositive = holding.todayGainRate >= 0;
   const totalPositive = holding.gainRate >= 0;
   const gainPositive = holding.gainAmount >= 0;
@@ -293,36 +331,121 @@ export default function StockDetailDrawer({
     <>
       <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
         <SheetContent className="w-[400px] sm:w-[480px] overflow-y-auto">
-          <SheetHeader className="mb-6">
-            <SheetTitle className="flex items-center gap-2 flex-wrap">
-              <a
-                href={isUSD
-                  ? `https://finance.yahoo.com/quote/${holding.종목번호}`
-                  : `https://finance.naver.com/item/main.naver?code=${holding.종목번호}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline underline-offset-2 cursor-pointer"
-              >
-                {holding.종목명}
-              </a>
-              <span className="text-sm text-muted-foreground font-normal">
-                {holding.종목번호}
-              </span>
-              <Badge className="text-xs">{holding.sector}</Badge>
-            </SheetTitle>
+          <SheetHeader className="mb-4">
+            <div className="flex items-start justify-between gap-3">
+              <SheetTitle className="flex items-center gap-2 flex-wrap">
+                <a
+                  href={isUSD
+                    ? `https://finance.yahoo.com/quote/${holding.종목번호}`
+                    : `https://finance.naver.com/item/main.naver?code=${holding.종목번호}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline underline-offset-2 cursor-pointer"
+                >
+                  {holding.종목명}
+                </a>
+                <span className="text-sm text-muted-foreground font-normal">
+                  {holding.종목번호}
+                </span>
+                <Badge className="text-xs">{holding.sector}</Badge>
+              </SheetTitle>
+              {onEdit && !editMode && (
+                <button
+                  onClick={startEdit}
+                  className="shrink-0 text-xs px-2.5 py-1 rounded-md border hover:bg-muted transition-colors mt-0.5"
+                >
+                  수정
+                </button>
+              )}
+            </div>
           </SheetHeader>
 
-          {/* 주가 차트 */}
-          <PriceChart
+          {/* 수정 모드 */}
+          {editMode && (
+            <div className="mb-6 space-y-3">
+              <div className="space-y-2">
+                {editRows.map((row, idx) => (
+                  <div key={row.account} className="bg-muted/50 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium">{row.account}</span>
+                      <button
+                        onClick={() => setEditRows((prev) => prev.filter((_, i) => i !== idx))}
+                        className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">수량</label>
+                        <input
+                          type="number"
+                          value={row.qty}
+                          onChange={(e) =>
+                            setEditRows((prev) =>
+                              prev.map((r, i) => i === idx ? { ...r, qty: e.target.value } : r)
+                            )
+                          }
+                          className="border border-input rounded-md px-2 py-1.5 text-sm bg-background w-full focus:outline-none focus:ring-1 focus:ring-ring"
+                          min={0}
+                          step="any"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          평단가 {isUSD ? '($)' : '(원)'}
+                        </label>
+                        <input
+                          type="number"
+                          value={row.avgCost}
+                          onChange={(e) =>
+                            setEditRows((prev) =>
+                              prev.map((r, i) => i === idx ? { ...r, avgCost: e.target.value } : r)
+                            )
+                          }
+                          className="border border-input rounded-md px-2 py-1.5 text-sm bg-background w-full focus:outline-none focus:ring-1 focus:ring-ring"
+                          min={0}
+                          step="any"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {editRows.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-3 bg-muted/30 rounded-lg">
+                    모든 계좌를 삭제하면 해당 종목이 제거됩니다.
+                  </p>
+                )}
+              </div>
+              {editSaveError && <p className="text-xs text-red-500">{editSaveError}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={saveEdit}
+                  className="flex-1 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  저장
+                </button>
+                <button
+                  onClick={() => { setEditMode(false); setEditSaveError(''); }}
+                  className="flex-1 py-1.5 text-xs rounded-md border hover:bg-muted transition-colors"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 주가 차트 (수정 모드일 때 숨김) */}
+          {!editMode && <PriceChart
             key={holding.종목번호}
             ticker={holding.종목번호}
             unit={holding.단위}
             open={open}
             defaultRange="3mo"
-          />
+          />}
 
           {/* 요약 지표 */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
+          {!editMode && <div className="grid grid-cols-2 gap-4 mb-6">
             <div className="bg-muted/50 rounded-lg p-3">
               <p className="text-xs text-muted-foreground">총 보유수량</p>
               <p className="text-lg font-bold">{holding.totalQty.toLocaleString('ko-KR')}주</p>
@@ -374,16 +497,16 @@ export default function StockDetailDrawer({
                 {formatRate(holding.gainRate)}
               </p>
             </div>
-          </div>
+          </div>}
 
-          {holding.priceUnavailable && (
+          {!editMode && holding.priceUnavailable && (
             <p className="text-xs text-amber-500 mb-4 bg-amber-50 rounded p-2">
               ⚠️ 현재가 조회에 실패하여 평균단가 기준으로 표시됩니다.
             </p>
           )}
 
           {/* 계좌별 분포 */}
-          <div>
+          {!editMode && <div>
             <h3 className="text-sm font-semibold mb-3">계좌별 분포</h3>
             <div className="space-y-3">
               {holding.byAccount.map((acc) => (
@@ -400,7 +523,7 @@ export default function StockDetailDrawer({
                 </div>
               ))}
             </div>
-          </div>
+          </div>}
 
           {/* ETF 구성 */}
           {etfHoldings && etfHoldings.length > 0 && (
